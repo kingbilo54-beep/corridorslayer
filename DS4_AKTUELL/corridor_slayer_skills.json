@@ -1,0 +1,10 @@
+{
+  "levels": {
+    "waffen_dmg": 1,
+    "ener_idle": 3,
+    "vert_nano": 1,
+    "spez_adrenalin": 1,
+    "ener_leitung": 1,
+    "vert_panzerung": 1
+  }
+}

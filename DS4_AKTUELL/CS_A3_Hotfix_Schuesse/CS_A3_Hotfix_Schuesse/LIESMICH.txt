@@ -1,0 +1,104 @@
+CORRIDOR SLAYER | PAKET A3: SCHUESSE GARANTIERT - NOTFALL-RENDERER
+===================================================================
+
+DAS PROBLEM, DAS DU MELDET HAST
+-------------------------------
+"Weder die Angriffe der Gegner noch die vom eigenen Schiff sind
+sichtbar." Die Boss-Angriffe dagegen erschienen normal.
+
+WAS ICH AUF MEINER TESTKOPIE GEFUNDEN HABE
+------------------------------------------
+Ich habe dein Meldung zuerst NACHGEPRUEFT (nicht blind gefixt):
+einen echten Rendertest gefahren, bei dem das Spiel mehrere Sekunden
+laeuft und pixelgenau an JEDER Projektil-Position geprueft wird, ob
+der Schuss tatsaechlich auf den Bildschirm gemalt wurde.
+
+Ergebnis auf dem Code-Stand dieses Pakets:
+  * Kampagne:   102/102 Spieler-Schuesse sichtbar, 299/299 Gegner-Schuesse
+  * Idle-Modus:  66/66 Spieler-Schuesse sichtbar, 329/329 Gegner-Schuesse
+
+Die Zeichenlogik selbst funktioniert also. Das Fehlerbild auf deinem
+Rechner (alles unsichtbar AUSSER den Boss-Angriffen, die main.py
+selbst zeichnet) passt exakt auf EINEN Befund: Deine combat_fx.py ist
+nicht die vollstaendige Version aus Paket A2, sondern der alte
+Test-Stub aus Paket A1 (oder eine sonst beschraedigte Datei).
+Haeufigste Ursachen: der ZIP-Inhalt landete in einem Unterordner statt
+im Spielordner, oder die Datei wurde beim Kopieren uebersprungen.
+
+STATT NOCH EINMAL ZU SAGEN "BITTE KOPRIERE DIE DATEI RICHTIG", HABE
+ICH DAS PROBLEM ENTFERNT - ES KANN NUN NICHT MEHR AUFTRETEN:
+-------------------------------------------------------------
+main.py traegt jetzt einen EINGEBAUTEN NOTFALL-RENDERER:
+
+1) KENNUNGSPRUEFUNG: combat_fx.py hat jetzt eine Versions-Kennung
+   (FX_VERSION = "A2"). Fehlt diese Kennung in deiner Datei (alter
+   Stand, Stub, beschaedigt), schaltet main.py beim Start automatisch
+   auf den eingebauten Renderer um und schreibt eine klare Warnung in
+   corridor_slayer.log. Deine Schuesse sind SOFORT wieder sichtbar -
+   ganz gleich, in welchem Zustand deine combat_fx.py ist.
+
+2) FEHLER-SCHUTZSCHALTER: Wirft die combat_fx zur Laufzeit irgendwo
+   einen Fehler (Update oder Zeichnen), schaltet main.py dauerhaft auf
+   den eingebauten Renderer um und laeuft unveraendert weiter. Der
+   Fehler landet MIT Stacktrace in corridor_slayer.log - nichts geht
+   mehr stumm verloren.
+
+3) Der Notfall-Renderer zeichnet dieselben Daten (combat.projectiles,
+   combat.particles, combat.muzzle_flashes): Projektile mit Flugspur,
+   Leuchtkreis und hellem Kern, Explosionspartikel, Muendungsfeuer.
+   Etwas schlichter als die volle combat_fx, aber garantiert sichtbar
+   und performancefreundlich.
+
+Die Kampf-Logik (Schaden, Trefferzonen, Beute) war und bleibt unberuehrt.
+
+EINBAU - NUR DIESE 2 DATEIEN KOPIEREN (UEBERSCHREIBEN)
+------------------------------------------------------
+  main.py
+  combat_fx.py
+
+Deine Saves, Assets, JSON-Dateien und der Rest des Ordners bleiben
+unberuehrt. Auch wenn du gar nichts an combat_fx.py aenderst:
+Ab diesem Paket sind die Schuesse in JEDEM Fall sichtbar.
+
+SO PRUEFST DU ES SELBST (30 SEKUNDEN)
+-------------------------------------
+1) Eine normale Stufe starten: Schuesse des Schiffs UND der Gegner
+   muessen jetzt in jedem Fall sichtbar sein.
+2) corridor_slayer.log oeffnen (liegt im Spielordner). Steht dort die
+   Zeile "combat_fx.py traegt keine A2-Kennung ...", war deine Datei
+   der Ausloeser - der Notfall-Renderer hat es automatisch abgefangen.
+   Du kannst die combat_fx.py aus diesem Paket zurueckkopieren, um die
+   volle Optik (Leuchtspuren, Glow) zu bekommen; Pflicht ist das nicht.
+
+TESTERGEBNISSE (auf genau diesem Stand ausgefuehrt)
+---------------------------------------------------
+* py_compile: main.py, combat_fx.py OK
+* Rendertest KAMPAGNE (Sektor 1, Stufe 3): 100 % aller Projektile
+  pixelgenau sichtbar (Spieler cyan/weiss, Gegner rot)
+* Rendertest IDLE: 100 % sichtbar
+* Simulation "combat_fx ohne Kennung" (dein Fall): Notfall-Renderer
+  greift automatisch, 340/340 Projektile sichtbar (100 %)
+* Simulation "combat_fx wirft Fehler": Schutzschalter schaltet um,
+  Spiel laeuft weiter, 334/334 sichtbar, Warnung mit Stacktrace im Log
+* Normale A2-combat_fx: unverändert volle Optik, 203/203 sichtbar
+* Smoke-Test: alle 13 Zustaende + Beschwörungs-Zeremonie + Idle-Gefecht
+  sauber (je mehrere Frames gezeichnet)
+* Bug-Checks: 4/4 weiterhin behoben (Zyklusschutz, Dezimalwerte, MP4,
+  Namenskonflikte)
+* Ausrichtungs-Check: alle 14 Gegnertypen Nase zum Schiff, aufrecht,
+  Kampagne + Idle (Spiegel-Regel)
+* Sperren-Check: inkonsistenter Save (Grad 4, Erde nicht geschafft)
+  wird beim Laden auf Erde zurueckgesetzt; Klick auf gesperrten Sektor
+  zeigt Meldung, kein Einsatzstart
+* Eisdrache Stufe 15: aktiv, Zeichnungsbreite 300 Welt-Pixel bestaetigt
+* Kampagnen-Simulation: alle 15 Stufen x 5 Sektoren OK (Sektor 1 mit
+  Schiff 4-5 schaffbar, danach spuerbar schwerer)
+* Boss-Simulation: Sektoren 2-5 alle OK
+* Wirtschafts-Simulation: Einkommen unveraendert (dein Wunsch)
+
+WICHTIG FUER DIE NAECHSTEN MELDUNGEN
+------------------------------------
+Wenn irgendwo etwas unsichtbar bleibt oder still wegbricht: corridor_
+slayer.log im Spielordner oeffnen und die letzten Zeilen schicken -
+seit dem Refaktor landen alle stillen Fehler dort, seit A3 auch
+FX-Defekte mit Stacktrace.

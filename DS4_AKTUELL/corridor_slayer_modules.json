@@ -1,0 +1,150 @@
+{
+  "credits": 11665,
+  "data_cores": 20,
+  "highest_campaign": 2,
+  "highest_stage": 2,
+  "completed_stages": [
+    [
+      1,
+      1
+    ],
+    [
+      1,
+      2
+    ],
+    [
+      1,
+      3
+    ],
+    [
+      1,
+      4
+    ],
+    [
+      1,
+      5
+    ],
+    [
+      1,
+      6
+    ],
+    [
+      1,
+      7
+    ],
+    [
+      1,
+      8
+    ],
+    [
+      1,
+      9
+    ],
+    [
+      1,
+      10
+    ],
+    [
+      1,
+      11
+    ],
+    [
+      1,
+      12
+    ],
+    [
+      1,
+      13
+    ],
+    [
+      1,
+      14
+    ],
+    [
+      1,
+      15
+    ],
+    [
+      2,
+      1
+    ]
+  ],
+  "completed_campaigns": [
+    1
+  ],
+  "cosmetic_hull": 6,
+  "ng_plus": 0,
+  "saved_at": 1794418671.99278,
+  "levels": {
+    "kanonen": 10,
+    "schild": 8,
+    "huelle": 6,
+    "reaktor": 6,
+    "antrieb": 6,
+    "hangar": 5,
+    "radar": 5,
+    "reparatur": 6
+  },
+  "rpg": {
+    "progress": {
+      "level": 9,
+      "xp": 984,
+      "quantum": 18,
+      "total_xp": 8688
+    },
+    "quests": {
+      "daily": {
+        "period": "2026-11-11",
+        "prog": {
+          "vernichtung": 5,
+          "ausdauer": 3,
+          "schlachtfeld": 3,
+          "einsatzbereit": 1
+        },
+        "claimed": [
+          "einsatzbereit",
+          "schlachtfeld"
+        ],
+        "bonus_claimed": false
+      },
+      "weekly": {
+        "period": "2026-W46",
+        "prog": {
+          "ingenieur_w": 10,
+          "flottenzerstoerer": 5,
+          "sektorbezwinger": 1,
+          "kriegsveteran": 3,
+          "eisern": 3
+        },
+        "claimed": [
+          "ingenieur_w",
+          "sektorbezwinger"
+        ],
+        "bonus_claimed": false
+      }
+    },
+    "summon": {
+      "owned": {
+        "stichel": 8,
+        "wachposten": 7,
+        "leviathan": 2,
+        "skimmer": 13,
+        "vulkan": 1,
+        "ingenieur": 1,
+        "funke": 6,
+        "nachtfalter": 3,
+        "lyra": 1,
+        "nova": 2,
+        "ionfaenger": 4,
+        "aegis": 5,
+        "razorlight": 2,
+        "phantom": 1
+      },
+      "equipped": [
+        null,
+        null,
+        null
+      ]
+    }
+  }
+}

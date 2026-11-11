@@ -1,0 +1,8 @@
+Szenario;Spielzeit_min;Cores_ALT;Cores_NEU;Skills_ALT;Skills_NEU;Anteil_NEU
+15 min, nur Erstprogress;15;138;138;14/103;14/103;14%
+1 h, Progress + Refarm;60;1153;388;60/103;29/103;28%
+1 h, Progress + Idle;60;167;167;16/103;16/103;16%
+3 h, Progress + Refarm;180;3514;979;103/103;54/103;52%
+3 h, Progress + Idle;180;243;243;21/103;21/103;20%
+8 h, intensives Refarmen;480;9416;2454;103/103;87/103;84%
+8 h, Progress + Idle;480;435;435;32/103;32/103;31%
