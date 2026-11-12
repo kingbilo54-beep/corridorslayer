@@ -1014,6 +1014,18 @@ class Game:
         self.pve = PvECombat(is_idle=False, campaign_id=1, stage_id=1,
                              ship_level=self.modules.ship_level)
 
+        # AUFTRAG 22: LIVE-IDLE-FENSTER laden (Neustart-resistent). Das
+        # 8-h-Einkommens-Max und die 20 Cores gelten je rollierendem
+        # 24-h-Fenster und werden im Save persistiert - ein Spielstart
+        # gibt die verbrauchte Zeit NICHT mehr frei (Fenster-Rollover
+        # erst nach 24 h, siehe _idle_window_check).
+        self._idle_window_check()
+        self.idle_combat.idle_cores_used = max(
+            0, int(getattr(self.modules, "idle_live_cores_used", 0) or 0))
+        self.idle_combat.income_frozen = (
+            float(getattr(self.modules, "idle_session_used_s", 0.0) or 0.0)
+            >= IDLE_SESSION_CAP_S)
+
         self.idle_mode = True
         self.show_upgrades = False
 
@@ -1261,6 +1273,21 @@ class Game:
         self.modules.save()
 
     # ---------------- PAKET 8.6: IDLE-BERICHT (OFFLINE-EINKOMMEN) ------
+    def _idle_window_check(self):
+        """AUFTRAG 22: Rollierendes 24-h-Fenster des Live-Idle (Neustart-
+        resistent). Laeuft das Fenster ab (oder existiert noch nicht -
+        alter Save), werden verbrauchte Idle-Stunden und Cores im SAVE
+        zurueckgesetzt und ein neues Fenster gestartet. Liefert True,
+        wenn ein neues Fenster begonnen wurde."""
+        now_ts = time.time()
+        ws = float(getattr(self.modules, "idle_window_start", 0.0) or 0.0)
+        if ws <= 0.0 or now_ts - ws >= rpg_config.IDLE_LIVE_WINDOW_S:
+            self.modules.idle_window_start = now_ts
+            self.modules.idle_session_used_s = 0.0
+            self.modules.idle_live_cores_used = 0
+            return True
+        return False
+
     def _compute_idle_report(self):
         """Offline-Einkommen für die Zeit seit der letzten Sicherung.
         SCHRITT 3b: Dieselbe Formel wie das Live-Idle - Nominaler Kill-
@@ -1670,18 +1697,29 @@ class Game:
         # PAKET 8.6: IDLE-LIVE-EINKOMMEN. Im Idle-Betrieb wird das
         # verdiente Geld regelmaessig in die Wallet ueberwiesen.
         # PAKET 8.8b: GEBREMST (Nutzerfeedback) - Auszahlung nur noch ALLE
-        # STUNDE (IDLE_PAYOUT_S), und nach 8 h Idle in dieser Sitzung ist
-        # das MAXIMUM erreicht: pve_system.income_frozen stoppt Credits
-        # und Cores (HUD zeigt "MAXIMUM ERREICHT").
+        # STUNDE (IDLE_PAYOUT_S).
+        # AUFTRAG 22: Das 8-h-Max ist jetzt an ein PERSISTIERTES 24-h-
+        # Fenster gebunden (idle_window_start/idle_session_used_s im Save)
+        # und die Cores an IDLE_LIVE_CORE_CAP je Fenster - ein Neustart
+        # setzt das Maximum NICHT mehr zurueck (vorher: jede Spielstart-
+        # Sitzung bekam frische 8 h und ungedeckelte Cores).
         if self.state == self.PLAYING and self.idle_mode:
             self._idle_auto_t += dt
             self._idle_session_t += dt
-            if (self._idle_session_t >= IDLE_SESSION_CAP_S
-                    and not getattr(self.idle_combat, "income_frozen", False)):
-                self.idle_combat.income_frozen = True
-                self.show_message("IDLE-MAXIMUM ERREICHT (8 H) - keine Beute mehr, "
-                                  "Verlassen setzt zurueck", duration=4.0)
-                SFX.play("hit", 0.5)
+            if self._idle_window_check():
+                self.idle_combat.income_frozen = False
+                self.idle_combat.idle_cores_used = 0
+                self._idle_auto_t = 0.0
+            if not self.idle_combat.income_frozen:
+                self.modules.idle_session_used_s = (
+                    float(self.modules.idle_session_used_s) + dt)
+                if (float(self.modules.idle_session_used_s) >= IDLE_SESSION_CAP_S
+                        and not getattr(self.idle_combat, "income_frozen", False)):
+                    self.idle_combat.income_frozen = True
+                    self.show_message("IDLE-MAXIMUM ERREICHT (8 H FENSTER) - "
+                                      "keine Beute mehr bis zum naechsten Fenster",
+                                      duration=4.0)
+                    SFX.play("hit", 0.5)
             if self._idle_auto_t >= IDLE_PAYOUT_S:
                 self._idle_auto_t = 0.0
                 cr = int(self.idle_combat.credits)
@@ -1692,6 +1730,11 @@ class Game:
                     if co:
                         msg += f", +{co} Data Core{'s' if co != 1 else ''}"
                     self.show_message(msg, duration=2.6)
+                # AUFTRAG 22: Core-Zaehler in den Save spiegeln (Neustart-
+                # resistent; die verbrauchten Sekunden laufen schon mit dem
+                # Save-Heartbeat, hier kommt der Core-Stand dazu).
+                self.modules.idle_live_cores_used = int(
+                    getattr(self.idle_combat, "idle_cores_used", 0))
         # PAKET 8.6: Save-Heartbeat haelt "saved_at" frisch (Basis des
         # Offline-Einkommens; schuetzt ausserdem den Fortschritt bei
         # Abstuerzen).
@@ -1890,8 +1933,15 @@ class Game:
                 self.idle_mode = True
                 self.idle_combat.stage_id = self.modules.highest_stage
                 self._sync_modules_to_combat()
-                # PAKET 8.8b: frische Idle-Sitzung (1h-Auszahlung + 8h-Max)
-                self.idle_combat.income_frozen = False
+                # PAKET 8.8b: frische Idle-Sitzung (1h-Auszahlung).
+                # AUFTRAG 22: das 8-h-Max bleibt am PERSISTIERTEN 24-h-
+                # Fenster - nur ein abgelaufenes Fenster gibt es neu frei.
+                self._idle_window_check()
+                self.idle_combat.idle_cores_used = max(
+                    0, int(getattr(self.modules, "idle_live_cores_used", 0) or 0))
+                self.idle_combat.income_frozen = (
+                    float(getattr(self.modules, "idle_session_used_s", 0.0) or 0.0)
+                    >= IDLE_SESSION_CAP_S)
                 self._idle_auto_t = 0.0
                 self._idle_session_t = 0.0
                 self.state = self.PLAYING
@@ -3501,6 +3551,40 @@ class Game:
                     gs.set_alpha(int(150 + 70 * math.sin(_now_ms * 0.0032)))
                     SCREEN.blit(gs, gs.get_rect(center=(int(ex), int(ey))))
                 ey += math.sin(_now_ms * 0.0021 + enemy.x * 0.13) * 4.0 * s
+            else:
+                # AUFTRAG 21: PROZEDURALE TYP-ANIMATIONEN (nur Zeichnung -
+                # Position/Kollision bleiben exakt an e.x/e.y; die Bewegung
+                # selbst laeuft in der pve-Logik). Keine neuen Grafiken:
+                # Alpha-Puls via Kopie, Taumel via Nach-Rotation, Glow wie
+                # bei der Boss-Aura (gepoolt).
+                _et = enemy.enemy_type
+                if _et == "hive":
+                    # biolumineszenter Puls-Glow hinter dem Bio-Traeger
+                    glow = _boss_glow((120, 255, 140))
+                    gr = int(max(img.get_width(), img.get_height()) * 0.55)
+                    if gr > 10:
+                        gk = ("hive", gr)
+                        gs = _boss_glow_scaled.get(gk)
+                        if gs is None:
+                            gs = pygame.transform.smoothscale(glow, (gr, gr))
+                            if len(_boss_glow_scaled) > 24:
+                                _boss_glow_scaled.clear()
+                            _boss_glow_scaled[gk] = gs
+                        gs.set_alpha(int(80 + 60 * math.sin(_now_ms * 0.004 + enemy.x * 0.1)))
+                        SCREEN.blit(gs, gs.get_rect(center=(int(ex), int(ey))))
+                if _et in ("wraith", "shard"):
+                    # Phasen-Flimmern: TARNKOPF stark, KRISTALL-ABFANGJAEGER fein
+                    if _et == "wraith":
+                        _a = 140 + int(115 * (0.5 + 0.5 * math.sin(_now_ms * 0.025 + enemy.x * 0.2)))
+                    else:
+                        _a = 185 + int(70 * (0.5 + 0.5 * math.sin(_now_ms * 0.045 + enemy.x * 0.3)))
+                    rot = rot.copy()
+                    rot.set_alpha(_a)
+                elif _et == "husk":
+                    # Taumel-Rotation des Panzerkanonenboots (quantisiert)
+                    _j = int(round(6.0 * math.sin(_now_ms * 0.0035 + getattr(enemy, "mv_phase", 0.0))))
+                    if _j:
+                        rot = pygame.transform.rotate(rot, _j)
             SCREEN.blit(rot, rot.get_rect(center=(int(ex), int(ey))))
             # PAKET 8.3: ENT-Ueberladung - der HP-Balken steht nicht mehr
             # permanent ueber JEDEM Gegner (Dauer-Unruhe), sondern nur noch

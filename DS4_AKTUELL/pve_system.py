@@ -14,7 +14,8 @@ from rpg_config import (BAL_PLAYER_DMG, BAL_PLAYER_RATE, BAL_PLAYER_HP,
                         BAL_LATE_STAGE_HP, BAL_LATE_STAGE_DMG,
                         ng_hp_mult, ng_dmg_mult, ng_reward_mult,   # AUFTRAG 6: NG+
                         CAMPAIGN_HP_MULT, CAMPAIGN_DMG_MULT,       # AUFTRAG 16b
-                        CAMPAIGN_REWARD_MULT, CAMPAIGN_SPAWN_SPD)
+                        CAMPAIGN_REWARD_MULT, CAMPAIGN_SPAWN_SPD,
+                        IDLE_LIVE_CORE_CAP)                        # AUFTRAG 22
 
 ENEMY_DATA = {}
 PLAYER_DATA = {}
@@ -160,29 +161,31 @@ if not ENEMY_DATA:
                     "Spawn_Weight": 6, "HP_Add_Per_Stage": 30,
                     "HP_Mult_Per_Stage": 1.07, "Speed_Add_Per_Stage": 0.1,
                     "Damage_Add_Per_Stage": 2.0, "Idle_Reward_Mult": 1.2},
-        # AB HIER GEPARKTE TYPEN (Grafik vorhanden, Min_Ship_Level 99 =
-        # ausserhalb jedes moeglichen Schiffslevels -> nie im Pool):
+        # AUFTRAG 21: FREIGESCHALTET (waren geparkt mit Min_Ship_Level 99).
+        # Sektor-10-13-Gate = sie erscheinen natuerlich im Endgame
+        # (Sektor 5-8); Sektor 1-4-Erst-Spiele (Schiff < 10) bleiben
+        # unveraendert - Pool und Seed-Paarungen identisch zum Vorbild.
         # Kristall-Abfangjaeger (gruen, Asteroidenguertel-Palette)
         "shard": {"Base_HP": 30, "Base_Speed": 72, "Base_Damage": 6,
-                  "Base_Reward": 15, "Min_Ship_Level": 99,
-                  "Spawn_Weight": 28, "HP_Add_Per_Stage": 8,
+                  "Base_Reward": 26, "Min_Ship_Level": 10,
+                  "Spawn_Weight": 20, "HP_Add_Per_Stage": 8,
                   "HP_Mult_Per_Stage": 1.05, "Speed_Add_Per_Stage": 0.5,
                   "Damage_Add_Per_Stage": 1.4, "Idle_Reward_Mult": 1.0},
-        # Panzerkanonenboot (magenta-rot, Raumstation-Palette)
-        "husk": {"Base_HP": 64, "Base_Speed": 36, "Base_Damage": 10,
-                 "Base_Reward": 26, "Min_Ship_Level": 99,
-                 "Spawn_Weight": 20, "HP_Add_Per_Stage": 14,
-                 "HP_Mult_Per_Stage": 1.06, "Speed_Add_Per_Stage": 0.3,
-                 "Damage_Add_Per_Stage": 1.8, "Idle_Reward_Mult": 1.05},
         # Tarnkopf-Dart (violett, Dunkler-Sektor-Palette)
         "wraith": {"Base_HP": 40, "Base_Speed": 95, "Base_Damage": 8,
-                   "Base_Reward": 32, "Min_Ship_Level": 99,
+                   "Base_Reward": 32, "Min_Ship_Level": 11,
                    "Spawn_Weight": 14, "HP_Add_Per_Stage": 9,
                    "HP_Mult_Per_Stage": 1.05, "Speed_Add_Per_Stage": 0.6,
                    "Damage_Add_Per_Stage": 1.6, "Idle_Reward_Mult": 1.1},
+        # Panzerkanonenboot (magenta-rot, Raumstation-Palette)
+        "husk": {"Base_HP": 64, "Base_Speed": 36, "Base_Damage": 10,
+                 "Base_Reward": 40, "Min_Ship_Level": 12,
+                 "Spawn_Weight": 16, "HP_Add_Per_Stage": 14,
+                 "HP_Mult_Per_Stage": 1.06, "Speed_Add_Per_Stage": 0.3,
+                 "Damage_Add_Per_Stage": 1.8, "Idle_Reward_Mult": 1.05},
         # Bio-Traeger (biolumineszent gruen, Feindsignale-Palette)
         "hive": {"Base_HP": 130, "Base_Speed": 24, "Base_Damage": 13,
-                 "Base_Reward": 60, "Min_Ship_Level": 99,
+                 "Base_Reward": 60, "Min_Ship_Level": 13,
                  "Spawn_Weight": 8, "HP_Add_Per_Stage": 20,
                  "HP_Mult_Per_Stage": 1.07, "Speed_Add_Per_Stage": 0.2,
                  "Damage_Add_Per_Stage": 2.2, "Idle_Reward_Mult": 1.15},
@@ -230,6 +233,72 @@ PVE88_ROSTER = {
                 "Damage_Add_Per_Stage": 2.0, "Idle_Reward_Mult": 1.2},
 }
 ENEMY_DATA.update(PVE88_ROSTER)
+
+# ----------------------------------------------------------------------
+# AUFTRAG 21: TYP-EIGENE VERHALTENS- & FX-TABELLEN (reine Code-Daten,
+# keine neuen Grafik-Assets). Jeder Normal-Gegnertyp bekommt:
+#   * eigene BEWEGUNG (Logik, nicht nur Zeichnung): bob (Auf/Ab),
+#     sway (leichtes seitliches Schlingern) - Kollisionen/Targeting
+#     folgen e.x/e.y, also bewusst in der Logik.
+#   * eigene SCHUSS-CHARAKTERISTIK (Feuerrate, Projektil-Tempo/Groesse).
+#   * die vier neu freigeschalteten Typen je ein EIGENES Angriffs-
+#     muster: shard = Zickzack + Doppelschuss, wraith = Phasen-DASH,
+#     husk = KAMIKAZE-Rammstoss (fliegt bis zur Festung durch),
+#     hive = Faecher-Salve (3 Projektile).
+# Bestandstypen bleiben bewusst NAH am bisherigen Charakter (kleine
+# Amplituden, Feuerraten um den alten 1.5-3.0 s-Band), damit die
+# Sektor 1-5-Balance nicht kippt (Simulation beweist es).
+ENEMY_BEHAVIOR = {
+    #            bob_amp bob_f  sway_amp sway_f   cd_lo cd_hi proj_speed proj_size
+    "skitter":     dict(bob_amp=9.0, bob_f=2.3, sway_amp=6.0, sway_f=2.0,
+                        cd=(1.1, 2.0), proj_speed=270.0, proj_size=4),
+    "lancer":      dict(bob_amp=5.0, bob_f=1.1, sway_amp=4.0, sway_f=1.0,
+                        cd=(1.6, 3.0), proj_speed=240.0, proj_size=5),
+    "interceptor": dict(bob_amp=7.0, bob_f=2.0, sway_amp=10.0, sway_f=2.6,
+                        cd=(1.3, 2.4), proj_speed=300.0, proj_size=4),
+    "bomber":      dict(bob_amp=4.0, bob_f=0.9, sway_amp=3.0, sway_f=0.8,
+                        cd=(1.8, 3.2), proj_speed=210.0, proj_size=7),
+    "frigate":     dict(bob_amp=5.0, bob_f=1.0, sway_amp=5.0, sway_f=1.1,
+                        cd=(1.7, 3.1), proj_speed=250.0, proj_size=5),
+    "destroyer":   dict(bob_amp=3.0, bob_f=0.7, sway_amp=2.0, sway_f=0.5,
+                        cd=(2.0, 3.4), proj_speed=230.0, proj_size=7),
+    "stalker":     dict(bob_amp=8.0, bob_f=2.6, sway_amp=8.0, sway_f=2.4,
+                        cd=(1.2, 2.3), proj_speed=280.0, proj_size=4),
+    "medusa":      dict(bob_amp=6.0, bob_f=1.3, sway_amp=4.0, sway_f=0.9,
+                        cd=(1.5, 2.9), proj_speed=220.0, proj_size=5),
+    "carrier":     dict(bob_amp=3.0, bob_f=0.8, sway_amp=2.0, sway_f=0.6,
+                        cd=(1.9, 3.3), proj_speed=240.0, proj_size=6),
+    "eye":         dict(bob_amp=5.0, bob_f=1.5, sway_amp=6.0, sway_f=1.4,
+                        cd=(1.4, 2.7), proj_speed=290.0, proj_size=5),
+    "crystal":     dict(bob_amp=3.0, bob_f=0.8, sway_amp=2.0, sway_f=0.6,
+                        cd=(1.8, 3.2), proj_speed=230.0, proj_size=6),
+    # --- AUFTRAG 21: die vier freigeschalteten Typen mit EIGENEM Muster ---
+    "shard":       dict(bob_amp=14.0, bob_f=3.4, sway_amp=10.0, sway_f=3.0,
+                        cd=(1.0, 1.8), proj_speed=330.0, proj_size=4,
+                        pattern="zigzag"),     # Zickzack + Doppelschuss
+    "wraith":      dict(bob_amp=6.0, bob_f=1.8, sway_amp=6.0, sway_f=1.6,
+                        cd=(1.3, 2.5), proj_speed=310.0, proj_size=4,
+                        pattern="dash"),       # Phasen-DASH Richtung Festung
+    "husk":        dict(bob_amp=4.0, bob_f=1.0, sway_amp=3.0, sway_f=0.7,
+                        cd=(1.7, 3.0), proj_speed=250.0, proj_size=6,
+                        pattern="kamikaze"),   # Rammt bis zur Festung
+    "hive":        dict(bob_amp=5.0, bob_f=0.9, sway_amp=3.0, sway_f=0.8,
+                        cd=(2.2, 3.6), proj_speed=230.0, proj_size=5,
+                        pattern="fan"),        # 3er-Faecher-Salve
+}
+
+# FX-Palette je Typ (Treffer-Glitzer + Explosionsfarbe) - passend zur
+# vorhandenen Sprite-Palette, keine neuen Assets:
+ENEMY_FX_COL = {
+    "skitter": (170, 255, 120), "lancer": (255, 210, 90),
+    "interceptor": (130, 200, 255), "bomber": (255, 120, 60),
+    "frigate": (150, 220, 170), "destroyer": (255, 90, 70),
+    "stalker": (200, 255, 110), "medusa": (255, 140, 220),
+    "carrier": (120, 255, 150), "eye": (255, 70, 110),
+    "crystal": (110, 220, 255), "shard": (140, 255, 190),
+    "husk": (255, 110, 200), "wraith": (190, 120, 255),
+    "hive": (120, 255, 140), "boss": (255, 170, 0),
+}
 
 # PAKET 8.8: BOSSE. Vorher gab es nur DEN Einen Boss (Stufe 15, lancer,
 # HP x0.7 abgeschwaecht, EIN gezielter Schuss alle 1,5-3 s) - bei
@@ -543,6 +612,12 @@ class Enemy:
     base_y: float = 270.0      # Ruhelage der Vertikalbewegung
     move_phase: float = 0.0    # Phasenversatz der Sinuswellen
     mouth_open: bool = False   # Maul-Zustand (Drachen-Sprite offen/geschlossen)
+    # AUFTRAG 21: Typ-eigene Bewegung & Angriffsmuster (Normal-Gegner)
+    mv_phase: float = 0.0      # Phasenversatz Bob/Sway (Random je Spawn)
+    pattern: str = "shot"      # "shot" (klassisch) | "zigzag" | "dash" | "kamikaze" | "fan"
+    dash_t: float = 0.0        # wraith: Rest-Dauer des laufenden Dash
+    dash_cd: float = 0.0       # wraith: Cooldown bis zum naechsten Dash
+    kamikaze_hit: bool = False # husk: Kontakt-Schaden bereits ausgeloesst
 
 @dataclass
 class Projectile:
@@ -677,6 +752,10 @@ class PvECombat:
         # PAKET 8.8b: IDLE-MAXIMUM - main.py friert das Idle-Einkommen ein,
         # sobald die Idle-Sitzung 8 h erreicht hat (AFK-Profit-Bremse).
         self.income_frozen = False
+        # AUFTRAG 22: Live-Idle-Cores je FENSTER deckeln (wie der Offline-
+        # Bericht: IDLE_LIVE_CORE_CAP). main.py spiegelt den Zaehler in den
+        # Spielstand (Neustart-resistent) und setzt ihn beim Laden zurueck.
+        self.idle_cores_used = 0
         # PAKET 8.8c: Zusatz-Angriffe der Bosse (Bandbreite gegen Monotonie)
         self.boss_bombs: list = []   # fliegende GLUTBOMBEN
         self.boss_spikes: list = []  # aktive EISSPIESS-Eruptionen
@@ -1011,6 +1090,16 @@ class PvECombat:
             self.boss_ref = e
             self.boss_name = boss_cfg["name"]
             self.boss_banner_t = 3.0
+        else:
+            # AUFTRAG 21: Typ-eigene Verhalten (Bewegung + Muster) setzen.
+            # base_y dient als Ruhelage der Typ-Bewegung (Bob um die Spawn-
+            # Spur); Kollisionen/Targeting folgen e.x/e.y unveraendert.
+            e.base_y = float(lane_y)
+            bh = ENEMY_BEHAVIOR.get(e.enemy_type)
+            if bh:
+                e.pattern = bh.get("pattern", "shot")
+                e.mv_phase = random.uniform(0.0, math.tau)
+                e.dash_cd = random.uniform(2.0, 4.0)
         self.enemies.append(e)
 
     def _boss_shoot(self, e, cx, cy):
@@ -1277,17 +1366,31 @@ class PvECombat:
             SFX.play("explosion", 0.18)      # kurzes Aufheulen vor dem Angriff
 
     def _spawn_explosion(self, x, y, enemy_type):
+        """AUFTRAG 21: Zerstoerung mit TYP-EIGENER Farbpalette (ENEMY_FX_COL,
+        passend zur vorhandenen Sprite-Farbwelt) und Groesse nach HP-Klasse:
+        Tanky-Typen brechen langsamer/grosser auseinander, flinke Typen
+        kleiner/schneller. 3-4 groessere Truemmer-Stuecke dazu. Reine
+        Partikel-Effekte, keine neuen Grafik-Assets."""
+        col = ENEMY_FX_COL.get(enemy_type, (255, 170, 0))
         count = 25 if (not self.is_idle and self.stage_id in BOSS_DATA) else 15
-        color = (255, 170, 0)
-        speed = 150.0
-        life = 0.6
+        big = enemy_type in ("crystal", "carrier", "hive", "destroyer", "husk")
+        speed = 120.0 if big else 150.0
+        life = 0.75 if big else 0.6
         
         for _ in range(count):
             angle = random.uniform(0, math.tau)
             vx = math.cos(angle) * random.uniform(0.2, 1.5) * speed
             vy = math.sin(angle) * random.uniform(0.2, 1.5) * speed
             size = random.uniform(2, 8)
-            self.particles.append(Particle(x, y, vx, vy, color, size, life, life))
+            self.particles.append(Particle(x, y, vx, vy, col, size, life, life))
+        # Truemmer-Stuecke: groesser, langsamer, lange sichtbar
+        for _ in range(4 if big else 2):
+            angle = random.uniform(0, math.tau)
+            vx = math.cos(angle) * random.uniform(0.4, 0.9) * speed * 0.6
+            vy = math.sin(angle) * random.uniform(0.4, 0.9) * speed * 0.6
+            size = random.uniform(7, 12)
+            self.particles.append(Particle(x, y, vx, vy, col, size,
+                                           life * 1.6, life * 1.6))
 
     def update(self, dt: float, center=(100, 270), cannon_positions=None):
         cx, cy = center
@@ -1412,16 +1515,15 @@ class PvECombat:
         for e in list(self.enemies):
             e.hit_flash = max(0.0, e.hit_flash - dt)
 
-            # PAKET 8.8c: Bosse halten ABSTAND (Nutzer: "Der Boss kommt
-            # jedoch viel zu nahe zum Schluss") - sie stoppen weiter
-            # draussen als Normalgegner (400), die Schnauze bleibt weg.
-            stop_x = BOSS_HOLD_X.get(e.enemy_type, 400.0) if e.is_boss else 400.0
-            if e.x > stop_x:
-                e.x -= e.speed * dt
-            else:
-                e.x = stop_x
-
             if e.is_boss:
+                # PAKET 8.8c: Bosse halten ABSTAND (Nutzer: "Der Boss kommt
+                # jedoch viel zu nahe zum Schluss") - sie stoppen weiter
+                # draussen als Normalgegner (400), die Schnauze bleibt weg.
+                stop_x = BOSS_HOLD_X.get(e.enemy_type, 400.0)
+                if e.x > stop_x:
+                    e.x -= e.speed * dt
+                else:
+                    e.x = stop_x
                 # PAKET 8.8c: echte Auf/Ab-Bewegung (vorher nur 4 px
                 # Zeichnungs-Bob): zwei ueberlagerte, langsame Sinuswellen,
                 # in Grenzen gehalten - Logik (Atem-Ziel etc.) folgt e.y.
@@ -1431,6 +1533,49 @@ class PvECombat:
                     e.y = BOSS_Y_MIN
                 elif e.y > BOSS_Y_MAX:
                     e.y = BOSS_Y_MAX
+            else:
+                # AUFTRAG 21: TYP-EIGENE BEWEGUNG (Logik, nicht nur Zeichnung).
+                bh = ENEMY_BEHAVIOR.get(e.enemy_type)
+                if e.pattern == "kamikaze":
+                    # HUSK: Rammt bis zur Festung durch (kein Stop bei 400).
+                    if (not e.kamikaze_hit
+                            and math.hypot(cx - e.x, cy - e.y) < 90.0):
+                        e.kamikaze_hit = True
+                        applied = self._apply_player_damage(
+                            e.damage * 1.5, e.x, e.y)
+                        self._spawn_damage(cx, cy - 40, int(applied),
+                                           (255, 110, 200))
+                        self._spawn_explosion(e.x, e.y, e.enemy_type)
+                        SFX.play("explosion", 0.4)
+                        self.enemies.remove(e)
+                        continue
+                    if e.x > cx - 20.0:
+                        e.x -= e.speed * dt
+                else:
+                    stop_x = 400.0
+                    if e.x > stop_x:
+                        e.x -= e.speed * dt
+                    else:
+                        e.x = stop_x
+                # Phasen-DASH des WRAITH: alle 3.5-5.5 s ein kurzer
+                # Vorstoss (0.35 s), danach wieder normale Annaeherung.
+                if e.pattern == "dash":
+                    if e.dash_t > 0.0:
+                        e.dash_t -= dt
+                        e.x -= 260.0 * dt
+                    else:
+                        e.dash_cd -= dt
+                        if e.dash_cd <= 0.0:
+                            e.dash_t = 0.35
+                            e.dash_cd = random.uniform(3.5, 5.5)
+                # Bob (Auf/Ab) + leichtes Sway-x um den Annaherungspfad,
+                # Amplituden/Frequenzen aus der Typ-Tabelle (klein).
+                if bh:
+                    e.y = e.base_y + math.sin(
+                        self.combat_time * bh["bob_f"] + e.mv_phase) * bh["bob_amp"]
+                    e.x += math.sin(
+                        self.combat_time * bh["sway_f"] + e.mv_phase * 1.3) \
+                        * bh["sway_amp"] * dt
 
             dist_to_ship = math.hypot(cx - e.x, cy - e.y)
             if dist_to_ship < 550: 
@@ -1451,12 +1596,31 @@ class PvECombat:
                 else:
                     e.attack_cooldown -= dt
                     if e.attack_cooldown <= 0:
-                        e.attack_cooldown = random.uniform(1.5, 3.0)
+                        # AUFTRAG 21: Feuerrate/Projektil-Tempo/-Groesse je
+                        # Typ; HIVE = 3er-Faecher, SHARD = Doppel-Schuss.
+                        bh = ENEMY_BEHAVIOR.get(e.enemy_type)
+                        cd_band = bh["cd"] if bh else (1.5, 3.0)
+                        p_speed = bh["proj_speed"] if bh else 250.0
+                        p_size = bh["proj_size"] if bh else 5
+                        p_col = ENEMY_FX_COL.get(e.enemy_type, (255, 0, 0))
+                        e.attack_cooldown = random.uniform(*cd_band)
                         dx, dy = cx - e.x, cy - e.y
                         dist = math.hypot(dx, dy) or 1
-                        self.projectiles.append(
-                            Projectile(x=e.x, y=e.y, vx=dx/dist, vy=dy/dist, damage=e.damage, color=(255, 0, 0), size=5, speed=250.0, kind="enemy")
-                        )
+                        b_vx, b_vy = dx / dist, dy / dist
+                        offsets = (0.0,)
+                        if bh and bh.get("pattern") == "fan":
+                            offsets = (-0.20, 0.0, 0.20)   # hive: Faecher
+                        elif bh and bh.get("pattern") == "zigzag":
+                            offsets = (-0.10, 0.10)        # shard: Doppelschuss
+                        for off in offsets:
+                            ca, sa = math.cos(off), math.sin(off)
+                            self.projectiles.append(
+                                Projectile(x=e.x, y=e.y,
+                                           vx=b_vx * ca - b_vy * sa,
+                                           vy=b_vx * sa + b_vy * ca,
+                                           damage=e.damage, color=p_col,
+                                           size=p_size, speed=p_speed,
+                                           kind="enemy"))
 
         # PAKET 8.8c: Bosse halten weiter Abstand (520-560), bleiben aber
         # ZIELBAR - sonst wuerden Kanonen/Drohnen den Boss nie beachten.
@@ -1555,6 +1719,12 @@ class PvECombat:
                         dmg = max(1, int(dmg))
                         e.hp -= dmg
                         e.hit_flash = 0.15
+                        # AUFTRAG 21: Treffer-Glitzer in der Typ-Farbe
+                        _fx = ENEMY_FX_COL.get(e.enemy_type, (0, 255, 255))
+                        self.particles.append(Particle(
+                            p.x, p.y,
+                            random.uniform(-50, 50), random.uniform(-50, 50),
+                            _fx, random.uniform(2.0, 4.0), 0.28, 0.28))
                         if crit:
                             self._spawn_damage(e.x, e.y - 30, dmg, (255, 190, 76), big=True)
                         else:
@@ -1645,7 +1815,11 @@ class PvECombat:
             # PAKET 8.4: Idle-Cores seltener (1/25 -> 1/60 Kills)
             # PAKET 8.8b: ... und gar nicht mehr nach 8 h
             if not frozen and self.idle_kill_counter % 60 == 0:
-                self.data_cores_earned += 1   # Idle -> Data Cores
+                # AUFTRAG 22: Core-Deckel je 24-h-Fenster (war ungedeckelt:
+                # ~105 Cores je 8-h-Sitzung; Offline-Bericht: 20).
+                if self.idle_cores_used < IDLE_LIVE_CORE_CAP:
+                    self.data_cores_earned += 1   # Idle -> Data Cores
+                    self.idle_cores_used += 1
         else:
             # PAKET 7C/8.4: BALANCING DER CORE-VERGABE.
             # Erstbeendung: 30% je Kill (vorher 100% - das

@@ -47,8 +47,20 @@ SAVE_PATH = Path(__file__).with_name("corridor_slayer_modules.json")
 
 # PAKET 7E: Schiffs-Rumpf (das Schiff SELBST) - Stufe 1-12.
 SHIP_MAX_LEVEL = 12
-SHIP_BASE_COST = 400       # Kosten Stufe 1 -> 2
-SHIP_COST_MULT = 1.62      # Kostenfaktor je weiterer Stufe
+# AUFTRAG 23 (Punkt 3): Rumpf-Kurve auf "L9 fruehestens gegen Ende von
+# Sektor 3" abgestimmt (weiche Steuerung NUR ueber Preise, keine Sperren).
+#   alt: Base 400, Mult 1.62 -> L9 kumuliert 167,773 Cr, L12 725,042 Cr
+#        (Finanzierbarkeit erst ab ~Sektor 6-8 - die Upgrade-Praemie fehlte
+#        im Mid-Game komplett).
+#   neu: Base 500, Mult 1.40 -> L9 kumuliert 96,305 Cr, L12 ~276,300 Cr.
+#   Simulation (tools/simulate_player_types.py, 0 Skillpunkte): kumuliertes
+#   Einkommen bis Ende Sektor 3 = ~70,000-80,000 Cr (Erst ~10,400 + Offline-
+#   Naechte ~60,000 bei Mid-Game-Deckeln) - Rumpf 9 faellt kurz danach
+#   natuerlich an ("fruehestens Ende Sektor 3"). Der reine Offline-Rusher
+#   (AUFTRAG-22-Fenster-Deckel) kommt maximal 1-2 Tage frueher dran.
+#   L12 bleibt Endgame-Kauf (+3%/Stufe-DMG unveraendert).
+SHIP_BASE_COST = 500       # Kosten Stufe 1 -> 2
+SHIP_COST_MULT = 1.40      # Kostenfaktor je weiterer Stufe
 SHIP_HP_PER_LVL = 80       # +max. Huelle je Schiffs-Stufe (Wirkung in main.py)
 SHIP_DMG_PCT_PER_LVL = 0.03  # +3% Schaden je Schiffs-Stufe (Wirkung in main.py)
 
@@ -140,6 +152,13 @@ class FortressModules:
         # rpg_ref = von main.py gesetzte Live-Objekte (RPGBundle).
         self.rpg_raw = None
         self.rpg_ref = None
+        # AUFTRAG 22: LIVE-IDLE-FENSTER (Neustart-resistent). Rollierendes
+        # 24-h-Fenster: max 8 h Idle-Einkommen und 20 Cores je Fenster.
+        # Persistiert im Save; alte Saves ohne die Keys starten sauber mit
+        # einem frischen Fenster (Defaults 0).
+        self.idle_window_start = 0.0     # Unix-Zeit des Fenster-Starts (0 = frisch)
+        self.idle_session_used_s = 0.0   # verbrauchte Idle-Einkommens-Sekunden
+        self.idle_live_cores_used = 0    # verbrauchte Idle-Cores im Fenster
         # AUFTRAG 6: NEW GAME+ Grad (0 = erster Durchlauf). Steigt bei jedem
         # Sieg gegen die letzte Kampagne (Sektor 5, Stufe 15) - siehe
         # rpg_config.NG_* und main.py (VICTORY-Screen). Alte Saves ohne den
@@ -279,6 +298,16 @@ class FortressModules:
                 self.prev_saved_at = max(0.0, float(data.get("saved_at", 0.0)))
             except (TypeError, ValueError):
                 self.prev_saved_at = 0.0
+            # AUFTRAG 22: Idle-Fenster laden (fehlt in alten Saves -> Defaults,
+            # main.py startet dann mit einem frischen 24-h-Fenster).
+            try:
+                self.idle_window_start = max(0.0, float(data.get("idle_window_start", 0.0)))
+                self.idle_session_used_s = max(0.0, float(data.get("idle_session_used_s", 0.0)))
+                self.idle_live_cores_used = max(0, int(data.get("idle_live_cores_used", 0)))
+            except (TypeError, ValueError):
+                self.idle_window_start = 0.0
+                self.idle_session_used_s = 0.0
+                self.idle_live_cores_used = 0
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
             pass
 
@@ -295,6 +324,11 @@ class FortressModules:
                 "ng_plus": int(getattr(self, "ng_plus", 0)),
                 "saved_at": time.time(),
                 "levels": {key: int(module.level) for key, module in self.modules.items()},
+                # AUFTRAG 22: Live-Idle-Fenster persistieren (Neustart-
+                # resistente 24-h-Deckelung).
+                "idle_window_start": float(getattr(self, "idle_window_start", 0.0)),
+                "idle_session_used_s": float(getattr(self, "idle_session_used_s", 0.0)),
+                "idle_live_cores_used": int(getattr(self, "idle_live_cores_used", 0)),
             }
             # PAKET 8: RPG-Block anhaengen, sobald die Systeme leben.
             if self.rpg_ref is not None:

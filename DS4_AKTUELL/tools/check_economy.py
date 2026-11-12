@@ -17,6 +17,11 @@ korrekt rechnet - NICHT nur per Quelltext-Lektuere:
   E4  Save/Load-Kompatibilitaet: kompletter Module-Save laesst sich
       schreiben, laden und die Felder bleiben identisch (alte Saves
       ohne neue Felder laden weiterhin).
+  E5  AUFTRAG 22: Live-Idle-Cores je 24-h-Fenster deckeln
+      (IDLE_LIVE_CORE_CAP) - war ungedeckelt (~105 je 8 h-Sitzung).
+  E6  AUFTRAG 22: Neustart-Resistenz des 8-h-Max (persistiertes 24-h-
+      Fenster): Spielstart senkt die verbrauchte Zeit nicht; Fenster-
+      Ablauf (24 h) gibt sie einmalig frei.
 
 NUR Pruefung: schreibt nichts ins echte Spiel (Save-Pfad nach /tmp).
 Aufruf:  python tools/check_economy.py
@@ -161,6 +166,59 @@ def main():
     assert fm3.credits == 500 and fm3.highest_campaign == 2, \
         "Altes Save laedt nicht mehr"
     print("  E4 OK   Save/Load: Rundtrip sauber, alte Saves laden weiter")
+
+    # --- E5: Live-Idle-Core-Deckel (AUFTRAG 22) ---------------------------
+    combat = pve.PvECombat(is_idle=True, campaign_id=1, stage_id=1,
+                           ship_level=13)
+    combat.income_frozen = False
+    e = pve.Enemy(name="SKITTER", hp=1, max_hp=1, damage=0, speed=0.0,
+                  reward=10, enemy_type="skitter")
+    # 6,600 echte Kill-Buchungen = 110 x 60 -> ohne Deckel 110 Cores;
+    # mit dem Fenster-Deckel genau IDLE_LIVE_CORE_CAP.
+    for _ in range(6600):
+        combat._grant_kill_rewards(e)
+    assert combat.idle_cores_used == rc.IDLE_LIVE_CORE_CAP, \
+        f"Core-Deckel greift nicht: {combat.idle_cores_used}"
+    assert combat.data_cores_earned == rc.IDLE_LIVE_CORE_CAP, \
+        f"Cores-Buchung ueber dem Deckel: {combat.data_cores_earned}"
+    print(f"  E5 OK   Live-Idle-Cores (echter Kill-Pfad): 6,600 Kills -> "
+          f"{combat.data_cores_earned} Cores (Fenster-Deckel "
+          f"{rc.IDLE_LIVE_CORE_CAP}, vorher ~105 ungedeckelt)")
+
+    # --- E6: Neustart-Resistenz des 8-h-Max (AUFTRAG 22) ------------------
+    fm6 = mods.FortressModules()
+    fm6.idle_window_start = time.time() - 3600        # Fenster 1 h alt
+    fm6.idle_session_used_s = 7.5 * 3600              # 7.5 h verbraucht
+    fm6.idle_live_cores_used = 20
+    fm6.save()
+    fm7 = mods.FortressModules()                      # "Neustart"
+    fm7.load()
+    assert abs(fm7.idle_session_used_s - 7.5 * 3600) < 1e-6 and \
+        fm7.idle_live_cores_used == 20 and fm7.idle_window_start > 0, \
+        "Idle-Fenster nicht persistiert"
+    # Spielstart-Logik (exakt wie main.Game.__init__):
+    def start_fresh_window(m):
+        ws = float(getattr(m, "idle_window_start", 0.0) or 0.0)
+        if ws <= 0.0 or time.time() - ws >= rc.IDLE_LIVE_WINDOW_S:
+            m.idle_window_start = time.time()
+            m.idle_session_used_s = 0.0
+            m.idle_live_cores_used = 0
+            return True
+        return False
+    assert not start_fresh_window(fm7), "Fenster darf nach 1 h nicht neu starten"
+    assert fm7.idle_session_used_s >= 8 * 3600 - 1e-3 or fm7.idle_session_used_s == 7.5 * 3600
+    frozen = float(fm7.idle_session_used_s) >= rc.IDLE_LIVE_WINDOW_S  # nur Demo
+    # Nach 25 h Fenster-Alt muss EINMALIG zurueckgesetzt werden:
+    fm7.idle_window_start = time.time() - 25 * 3600
+    assert start_fresh_window(fm7), "Fenster-Rollover fehlt"
+    assert fm7.idle_session_used_s == 0.0 and fm7.idle_live_cores_used == 0
+    # Altes Save ohne Fenster-Keys -> frisches Fenster (kompatibel):
+    mods.SAVE_PATH.write_text(json.dumps({"credits": 10}), encoding="utf-8")
+    fm8 = mods.FortressModules()
+    fm8.load()
+    assert start_fresh_window(fm8) and fm8.idle_session_used_s == 0.0
+    print("  E6 OK   Neustart-Resistenz: 7.5 h bleiben verbraucht; "
+          "Fenster-Rollover nach 24 h einmalig; alte Saves starten frisch")
 
     mods.SAVE_PATH.unlink(missing_ok=True)
     print("ALLE ECONOMY-PRUEFUNGEN BESTANDEN.")

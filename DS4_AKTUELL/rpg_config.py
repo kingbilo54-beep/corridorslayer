@@ -91,7 +91,14 @@ CAMPAIGN_HP_MULT     = {1: 1.0, 2: 1.30, 3: 1.70, 4: 2.20, 5: 2.85,
 CAMPAIGN_DMG_MULT    = {1: 1.0, 2: 1.15, 3: 1.32, 4: 1.52, 5: 1.75,
                         6: 2.01, 7: 2.32, 8: 2.67}
 CAMPAIGN_REWARD_MULT = {1: 1.0, 2: 1.12, 3: 1.26, 4: 1.42, 5: 1.60,
-                        6: 1.80, 7: 2.03, 8: 2.30}
+                        6: 2.60, 7: 3.30, 8: 4.20}
+# AUFTRAG 22: Sektor 6-8-Beute an die Upgrade-Kosten abgestimmt. Vorher
+# wuchs die Beute (x1.80/2.03/2.30) weit langsamer als die exponentielle
+# Kostenkurve (x1.6 je Modulstufe, BAL_COST_MULT 5.6) - Farm-Minuten je
+# Modul-Endstufe explodierten von ~20 (S1) auf ~220 (S8-L15). Mit der
+# neuen Kette sinkt sie auf 196/155/122 min je Modul-L15 (progressiv
+# BELohnend fuer Fortschritt) - die Ratio zur Sektor-Gefahr (HP x3.70-
+# 6.25) bleibt sinnvoll. Sektor 1-5 unveraendert (Erst-Durchlauf-Balance).
 # Spawn-Intervall-Faktor (multipliziert die Pause zwischen zwei Spawns;
 # kleiner = Gegner kommen schneller nach). Kampagne 1 unveraendert.
 CAMPAIGN_SPAWN_SPD   = {1: 1.0, 2: 0.93, 3: 0.87, 4: 0.80, 5: 0.75,
@@ -418,6 +425,13 @@ IDLE_SAVE_HEARTBEAT_S = 30.0       # alle 30 s sichern (saved_at bleibt frisch)
 IDLE_TAPER = ((3600, 0.55), (10800, 0.30), (8 * 3600, 0.15))
 IDLE_ACTIVE_KPM = 18               # konservative aktive Kills/min (Simulator-Messwert)
 IDLE_REPORT_ACTIVE_MIN = 45        # Bericht <= Ertrag von 45 Min aktivem Spielen
+# AUFTRAG 22: LIVE-IDLE in derselben Waehrung deckeln wie den Offline-
+# Bericht. Vorher: Cores 1/60 Kills OHNE Cap (~105 je 8 h-Sitzung,
+# Offline-Cap: 20) und das 8-h-Max lebte NUR in der Sitzung - jeder
+# Spielstart gab wieder 8 h. Neu: rollierendes 24-h-Fenster (persistiert
+# im Save), 8 h Idle-Einkommen und 20 Cores je Fenster.
+IDLE_LIVE_WINDOW_S = 24 * 3600     # Fensterlaenge (rollierend, Save-persistiert)
+IDLE_LIVE_CORE_CAP = 20            # Live-Idle-Cores je Fenster (= Offline-Cap)
 
 
 def idle_tapered_seconds(capped_s):
