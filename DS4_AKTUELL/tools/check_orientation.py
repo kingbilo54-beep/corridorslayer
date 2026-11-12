@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-"""AUFTRAG 15 (2. DURCHLAUF) | AUSRICHTUNGS-CHECK
-================================================
+"""AUFTRAG 15 (3. DURCHLAUF, PAKET A3) | AUSRICHTUNGS-CHECK
+===========================================================
 Rendert ALLE Gegnertypen mit der ECHTEN Spiel-Funktion main.enemy_rotated
 an 3 typischen Schiffspunkten (links auf Hoehe, links oben, links unten)
 und legt die Ergebnisse als Kontaktbogen check_orientation.png ab.
@@ -37,9 +37,11 @@ import main as game_mod  # noqa: E402  (echte enemy_rotated + Loader)
 #   right = Nase rechts  -> Spiel dreht mit -Winkel
 #   left  = Nase links   -> ENEMY_FACES_LEFT
 #   none  = frontal / seitlich
+# PAKET A3 (3. DURCHLAUF): hive gehoert jetzt zur RECHTS-Kunst
+# (Triebwerke links, Bug rechts) - siehe main.py ENEMY_FACES_LEFT.
 NOSE_IN_ART = {
     "skitter": "right", "shard": "right", "husk": "right",
-    "stalker": "left", "wraith": "right", "hive": "left",
+    "stalker": "left", "wraith": "right", "hive": "right",
     "carrier": "right", "medusa": "none", "eye": "none",
     "crystal": "none", "lancer": "left", "interceptor": "right",
     "brute": "right", "dragon": "right",   # Seitenansicht: Kopf rechts

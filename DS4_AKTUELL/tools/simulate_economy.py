@@ -152,17 +152,10 @@ def combat_setup(stage, st):
 
 
 def dps_of(combat):
-    """Gesamt-DPS: Kanonen (alle fokussieren ein Ziel) + Hangar-Drohnen."""
-    e_crit = 1.0 + combat.mod("crit_chance", 0.0) * (combat.mod("crit_mult", 2.0) - 1.0)
-    dps = combat.cannon_count * combat.cannon_damage * e_crit / max(0.05, combat.attack_rate)
-    # Drohnen (PAKET 7C): Anzahl = (hangar-1) + extra, Deckel 6
-    n = max(0, min(6, (combat.hangar_level - 1) + int(combat.mod("extra_drones", 0))))
-    if n > 0:
-        drone_dmg = combat.cannon_damage * 0.5 * (1.0 + combat.mod("drone_dmg_pct", 0.0))
-        rate_mult = max(0.4, combat.mod("drone_rate_mult", 1.0))
-        ivg = sum((1.15 + 0.18 * (i % 3)) for i in range(n)) / n * rate_mult
-        dps += n * drone_dmg / max(0.05, ivg)
-    return dps
+    """Gesamt-DPS: Kanonen (alle fokussieren ein Ziel) + Hangar-Drohnen.
+    PUNKT 3 (AUFTRAG): delegiert an pve_system.PvECombat.total_dps -
+    identische Formel wie das Spiel, keine Kopie mehr hier."""
+    return combat.total_dps()
 
 
 def sim_stage(stage, st):
@@ -171,11 +164,15 @@ def sim_stage(stage, st):
     dps = dps_of(combat)
 
     if stage in pve.BOSS_DATA:
-        b = pve.BOSS_DATA[stage]
+        # AUFTRAG 19: Boss-Cfg ueber die EINE Zuordnung (hier Sektor 1 -
+        # identisch zur historischen Tabelle, siehe pve_system.boss_cfg_for).
+        b = pve.boss_cfg_for(1, stage)
         # AUFTRAG 16b: Boss-Werte ueber die zentrale Quelle (identisch zum
         # Spiel, inkl. Kampagnen-Faktor; Idle/Kampagne 1 bleibt x1.0).
         hp = pve.boss_stats_for_stage(stage, 1)[0]
-        eff_dps = dps * (1.0 - b["dr"]) * (1.0 + combat.mod("boss_dmg_pct", 0.0))
+        # PUNKT 3: Boss-Panzerung + Boss-JAEGER ueber die EINE Quelle
+        # (identisch zu simulate_boss.dps_of bzw. pve_system.total_dps).
+        eff_dps = combat.total_dps(b["dr"])
         ttk = hp / max(1.0, eff_dps)
         fight_s = ttk + 2.0                 # Einzug/Puffer
         kills_min = 60.0 / fight_s          # ein Boss je Gefecht
@@ -262,20 +259,28 @@ def main():
           f"Preisfaktor BAL_COST_MULT = {rcfg.BAL_COST_MULT}")
     print(f"  Idle-Referenz       : Live-Formel seit Schritt 3b "
           f"(Nominal x {rcfg.IDLE_KPS} Kills/s x BAL_CREDITS x "
-          f"BAL_IDLE_CREDITS x {rcfg.IDLE_EFFICIENCY})")
+          f"BAL_IDLE_CREDITS)")
     # Offline-Idle-Vergleich je Stufe (kleine Zusatztabelle).
-    # AUFTRAG 13: Label jetzt dynamisch - der Wert kommt aus
-    # rpg_config.IDLE_EFFICIENCY (0.85 seit AUFTRAG 5, vorher 0.60).
+    # AUFTRAG 18 (PUNKT 1): Der Bericht nutzt die Stunden-Staffel
+    # (IDLE_TAPER) + Deckel am Aktiv-Ertrag (idle_report_cap_credits)
+    # statt der alten flachen IDLE_EFFICIENCY. Die Tabelle zeigt den
+    # Volllast-Stundenlohn (Taper 100 %) UND den gedeckelten 8h-Bericht.
     print("")
-    print(f"  OFFLINE-IDLE (IDLE-BERICHT, "
-          f"{int(round(rcfg.IDLE_EFFICIENCY * 100))} %): Stufe -> Credits/h "
-          f"(Live: x{1.0 / max(0.01, rcfg.IDLE_EFFICIENCY):.3f})")
+    print(f"  OFFLINE-IDLE (IDLE-BERICHT, Stunden-Staffel "
+          f"{rcfg.IDLE_TAPER[0][1]:.0%}/{rcfg.IDLE_TAPER[1][1]:.0%}/"
+          f"{rcfg.IDLE_TAPER[2][1]:.0%}, Deckel = {rcfg.IDLE_REPORT_ACTIVE_MIN} "
+          f"Min aktiv x {rcfg.IDLE_ACTIVE_KPM} Kills/min): "
+          f"Stufe -> Credits/h Volllast | 8h-Bericht")
     zeilen = []
     for stage in range(1, 16):
         nom = pve.stage_nominal_reward(stage, 12)
         rate = (nom * rcfg.IDLE_KPS * rcfg.BAL_CREDITS
-                * rcfg.BAL_IDLE_CREDITS * rcfg.IDLE_EFFICIENCY)
-        zeilen.append(f"{stage:>2}:{rate * 3600:>7,.0f} Cr/h")
+                * rcfg.BAL_IDLE_CREDITS)
+        volllast = rate * 3600
+        bericht8h = min(
+            int(rate * rcfg.idle_tapered_seconds(rcfg.IDLE_CAP_S)),
+            int(rcfg.idle_report_cap_credits(nom)))
+        zeilen.append(f"{stage:>2}:{volllast:>6,.0f}/{bericht8h:>7,.0f}")
     for i in range(0, len(zeilen), 5):
         print("    " + "  ".join(zeilen[i:i + 5]))
     for punkte in (0, 10, 20):

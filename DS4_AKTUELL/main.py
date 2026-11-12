@@ -165,6 +165,83 @@ import rpg_progression
 import quest_system
 import summon_system
 
+
+# =====================================================================
+# PAKET A3: NOTFALL-RENDERER FUER KAMPF-EFFEKTE
+# ---------------------------------------------------------------------
+# Paket A1 hatte versehentlich einen Test-Stub als combat_fx.py aus-
+# geliefert - Folge: Schuesse des Schiffs UND der Gegner waren unsicht-
+# bar, waehrend die Boss-Angriffe (die main.py selbst zeichnet) normal
+# erschienen. Damit das NIE wieder vorkommen kann, prueft main.py die
+# Versions-Kennung der combat_fx und schaltet bei fehlender Kennung
+# ODER bei einem Fehler im Update-/Draw-Pfad automatisch auf diesen
+# eingebauten Renderer um. Er zeichnet dieselben Datenquellen
+# (combat.projectiles / combat.particles / combat.muzzle_flashes)
+# bewusst schlicht, aber garantiert sichtbar.
+# =====================================================================
+class _FallbackCombatFX:
+    """Minimaler, aber garantiert sichtbarer Kampf-Effekt-Renderer."""
+
+    def __init__(self):
+        self.shake_x = 0.0
+        self.shake_y = 0.0
+
+    def update(self, dt, combat=None, center=(0, 0)):
+        self.shake_x = 0.0
+        self.shake_y = 0.0
+
+    def draw(self, surface, combat, T, s, elapsed):
+        # ---- Projektile: kurze Flugspur + Leuchtkreis + heller Kern ----
+        for p in getattr(combat, "projectiles", []):
+            col = p.color if isinstance(p.color, tuple) else (255, 255, 255)
+            x, y = T(p.x, p.y)
+            r = max(1, int(getattr(p, "size", 4) * s))
+            speed = float(getattr(p, "speed", 0.0) or 0.0)
+            if speed > 0.0:
+                tx = p.x - getattr(p, "vx", 0.0) * speed * 0.035
+                ty = p.y - getattr(p, "vy", 0.0) * speed * 0.035
+                sx0, sy0 = T(tx, ty)
+                pygame.draw.line(surface, col,
+                                 (int(sx0), int(sy0)), (int(x), int(y)),
+                                 max(1, r))
+            g = radial_glow_k(col, max(6, r * 3), 0.55)
+            surface.blit(g, g.get_rect(center=(int(x), int(y))),
+                         special_flags=pygame.BLEND_ADD)
+            pygame.draw.circle(surface, col, (int(x), int(y)), r)
+            pygame.draw.circle(surface, (255, 255, 255),
+                               (int(x), int(y)), max(1, r // 2))
+        # ---- Partikel (Explosionen/Glut/Funken) ----
+        for pt in getattr(combat, "particles", []):
+            life = float(getattr(pt, "life", 0.0) or 0.0)
+            ml = float(getattr(pt, "max_life", 0.0) or 0.0)
+            if life <= 0.0:
+                continue
+            k = life / ml if ml > 0.0 else 0.0
+            x, y = T(pt.x, pt.y)
+            r = max(1, int(getattr(pt, "size", 3) * s * (0.5 + 0.5 * k)))
+            c = getattr(pt, "color", (255, 180, 90))
+            if not isinstance(c, tuple):
+                c = (255, 180, 90)
+            fade = tuple(int(v * (0.35 + 0.65 * k)) for v in c[:3])
+            pygame.draw.circle(surface, fade, (int(x), int(y)), r)
+        # ---- Muendungsfeuer der Kanonen ----
+        for mf in getattr(combat, "muzzle_flashes", []):
+            try:
+                mx, my, ang, t = mf[0], mf[1], mf[2], mf[3]
+            except Exception:
+                continue
+            if t <= 0:
+                continue
+            x, y = T(mx, my)
+            k = max(0.0, min(1.0, t / 0.08))
+            L = (12 + 22 * k) * s
+            dx, dy = math.cos(ang), math.sin(ang)
+            pygame.draw.line(surface, (255, 220, 140), (int(x), int(y)),
+                             (int(x + dx * L), int(y + dy * L)),
+                             max(1, int(3 * s)))
+            pygame.draw.circle(surface, (255, 255, 220),
+                               (int(x), int(y)), max(1, int(2.5 * s)))
+
 pygame.init()
 
 # ---------- Anzeige: Landscape-Fenster (Desktop) / Vollbild (Handy) ----------
@@ -190,6 +267,14 @@ FPS = 60
 # ---------- Weltkonstanten (unveraendert -> Gameplay-Balance bleibt) ----------
 WORLD_W, WORLD_H = 960.0, 540.0
 FORTRESS_POS = (120.0, 270.0)
+
+# PUNKT 6 (Wunsch "urspruengliches Kanonendesign"): wieder EIN Turm auf
+# dem Deck, EIN Muzzle-Punkt - wie im Original (vor Punkt 3). Die
+# Salvenlogik aus Punkt 3 bleibt erhalten: pve_system feuert weiterhin
+# cannon_count Projektile pro Salve, jetzt komplett aus diesem einen
+# Standpunkt (siehe Kommentar im update()). Die zwischenzeitlichen
+# 8 Deck-Muzzle-Punkte (Punkt 3) sind zurueckgebaut - die zusaetzlichen
+# Tuerme waren nicht ausdruecklich gewuenscht.
 CANNON_OFFSETS = [(4, -14)]
 
 VERSION = "LANDSCAPE EDITION v8.7"
@@ -257,11 +342,14 @@ def _scaled(cache, key, img, s):
 # unbekannte Typen fallen auf 70 zurueck (alter Standard).
 # 8.8a: BOSSE MIT PRAESENZ (Nutzerwunsch) - TARNJAEGER/SCHLACHTSCHIFF/
 # EISDRACHE nochmal ~1.6x groesser (150/195/235 statt 96/124/148).
+# A2 (Nutzerwunsch "Der Eisdrache sollte auch etwas groesser sein"):
+# EISDRACHE 235 -> 300 (~x1.28); Kollisionsradius in pve_system
+# (BOSS_HIT_R dragon 60 -> 75) passt mit.
 ENEMY_IMG_W = {"skitter": 46, "shard": 50, "husk": 62, "wraith": 52,
                "hive": 78, "lancer": 112,
                "stalker": 68, "medusa": 64, "carrier": 110,
                "eye": 66, "crystal": 58,
-               "interceptor": 150, "brute": 195, "dragon": 235}
+               "interceptor": 150, "brute": 195, "dragon": 300}
 
 # PAKET 8.8b: SEITENANSICHT-SPRITES. Diese Gegner sind seitlich gezeichnet
 # (Drache: Kopf rechts, Beine unten) und dürfen NICHT gedreht werden -
@@ -269,48 +357,57 @@ ENEMY_IMG_W = {"skitter": 46, "shard": 50, "husk": 62, "wraith": 52,
 # werden stattdessen nur horizontal gespiegelt (Blick zum Schiff).
 SIDE_VIEW_ENEMIES = {"dragon"}
 
-# AUFTRAG 15 (2. DURCHLAUF): GEGNER-AUSRICHTUNG. Jedes enemys/*.png wurde
-# einzeln in Original-Ausrichtung verifiziert (Montage + Enden-Zoom je
-# Sprite, siehe scripts/orientation_*.png). Gegner spawnen bei x=1000 und
-# fliegen NACH LINKS zum Schiff - die Nase muss also zum Schiff zeigen.
-#   ENEMY_FACES_LEFT : Nase zeigt im KUNSTWERK nach LINKS. Der Winkel
-#     zum Schiff wird mit (180° - Winkel) gedreht, damit die Nase
-#     wirklich zum Schiff zeigt (nicht das Heck).
-#   ENEMY_NO_ROTATE  : FRONTAL/vertikal aufgebaute Sprites (Auge, Qualle,
-#     Kristall) - jede Rotation kippt sie auf die Seite/auf den Kopf.
-#     Sie bleiben aufrecht stehen.
-#   SIDE_VIEW_ENEMIES: Seitlich gezeichnet (Drache) - nur spiegeln.
-#   Alles andere     : Nase zeigt nach RECHTS -> Rotation -Winkel.
-# Korrigiert gegenueber dem 1. Durchlauf (Nutzer: "Gegner erscheinen
-# weiterhin überwiegend falsch herum", auch im Idle):
-#   * husk     : Nase zeigt RECHTS (runde Düse links, gepanzerte Bugkannte
-#                rechts) - war irrtuemlich als LINKS markiert.
-#   * carrier  : Nase zeigt RECHTS (Geschütztürme + konvergierende
-#                Bugflossen rechts) - war irrtuemlich als LINKS markiert.
-#   * stalker  : Nase zeigt LINKS (Mandibeln + Augencluster links,
-#                Hinterleib rechts) - war ohne Eintrag (RECHTS).
-ENEMY_FACES_LEFT = {"hive", "lancer", "stalker"}
+# AUFTRAG 15 (3. DURCHLAUF, PAKET A2): GEGNER-AUSRICHTUNG ENDGUELTIG.
+# Die ersten zwei Durchlaeufe waren falsch (Nutzer: erst "kopfueber",
+# dann "kommen mit dem Ruecken voran"). Ursache: rotate(-Winkel) dreht
+# ein Ziel links vom Gegner (Winkel ≈ 180°) IMMER auf den Ruecken, und
+# die 2.-Durchlauf-Klassifizierung (hive/lancer als LINKS-Kunst) stimmte
+# nicht. Jetzt: JEDES Sprite wurde am Original-Bild geprueft (Montage +
+# Sprite-Sheet enemies_sheet.png: Triebwerksflammen/Maul/ Klammerarme als
+# Bug-Merkmal). Und die Mechanik ist die BEWAEHRTE Drachen-Methode, die
+# der Nutzer am Boss ausdruecklich fuer korrekt haelt: SPIEGELN statt
+# 180°-Drehen - dadurch steht kein Gegner mehr je auf dem Ruecken.
+#   ENEMY_FACES_LEFT : Nase zeigt im KUNSTWERK nach LINKS
+#                      (stalker: Mandibeln/Augen links, lancer: Schnauze
+#                      + nach hinten streichender Kamm links).
+#   ENEMY_NO_ROTATE  : FRONTAL/vertikal (Auge, Qualle, Kristall) - bleibt
+#                      aufrecht stehen, keine Rotation.
+#   SIDE_VIEW_ENEMIES: Seitlich (Drache) - nur spiegeln (unveraendert).
+#   Alles andere     : Nase RECHTS (skitter, shard, husk, wraith, hive,
+#                      carrier, interceptor, brute - Triebwerke links im
+#                      Kunstwerk, Bug rechts).
+ENEMY_FACES_LEFT = {"stalker", "lancer"}
 ENEMY_NO_ROTATE = {"eye", "medusa", "crystal"}
 
 
 def enemy_rotated(img, enemy_type, enemy_x, enemy_y, ship_x, ship_y):
-    """AUFTRAG 15 (2. DURCHLAUF): Liefert das kampfbereit gedrehte Sprite.
-    Die Nase jedes Gegners zeigt zum Schiff - je Spritetyp nach der
-    Klassifizierung oben (LINKS-Kunst / frontal / seitlich / RECHTS).
-    Gilt EINHEITLICH fuer Kampagne UND Idle (beide zeichnen über
-    _draw_world -> diese Funktion). Zentral ausgelagert, damit der
-    Ausrichtungs-Test (tools/check_orientation.py) die ECHTE Spiellogik
-    prueft und nicht eine Kopie."""
+    """AUFTRAG 15 (3. DURCHLAUF): Liefert das kampfbereit gedrehte Sprite.
+    Die Nase zeigt IMMER zum Schiff und das Sprite bleibt IMMER aufrecht:
+    Ziel liegt links vom Gegner -> horizontal SPIEGELN (wie der Drache,
+    der beim Nutzer korrekt aussieht) und nur den Restwinkel drehen.
+    Ziel rechts -> ungespiegelt. So entsteht niemals wieder ein Ruecken-
+    laeufer oder ein kopfueber-Gegner. Gilt EINHEITLICH fuer Kampagne UND
+    Idle (beide zeichnen ueber _draw_world). Zentral ausgelagert, damit
+    tools/check_orientation.py die ECHTE Spiellogik prueft."""
     if enemy_type in SIDE_VIEW_ENEMIES:
-        # Seitlich gezeichnet: nur spiegeln, NICHT kippen.
+        # Seitlich gezeichnet: nur spiegeln, NICHT kippen (bewaehrt).
         return pygame.transform.flip(img, ship_x < enemy_x, False)
     if enemy_type in ENEMY_NO_ROTATE:
         return img
     ang_deg = math.degrees(math.atan2(ship_y - enemy_y, ship_x - enemy_x))
+    ziel_links = (ang_deg > 90.0 or ang_deg < -90.0)
     if enemy_type in ENEMY_FACES_LEFT:
-        # LINKS-Kunst: Nase um 180° versetzt zum Zielwinkel drehen.
-        return pygame.transform.rotate(img, 180.0 - ang_deg)
-    # Nase rechts: bisheriges Verhalten (-Winkel).
+        # LINKS-Kunst: umgekehrte Spiegel-Regel.
+        if ziel_links:
+            return pygame.transform.rotate(img, 180.0 - ang_deg)
+        return pygame.transform.rotate(
+            pygame.transform.flip(img, True, False), -ang_deg)
+    # RECHTS-Kunst (Normalfall): Ziel links -> spiegeln + Restwinkel,
+    # Ziel rechts -> ungespiegelt. Winkel 180-W bzw. -W richtet die Nase
+    # exakt aufs Ziel; das Sprite bleibt dabei aufrecht.
+    if ziel_links:
+        return pygame.transform.rotate(
+            pygame.transform.flip(img, True, False), 180.0 - ang_deg)
     return pygame.transform.rotate(img, -ang_deg)
 
 # PAKET 8.8b: IDLE-OEKONOMIE GEBREMST (Nutzerfeedback: "Im idle Modus
@@ -767,6 +864,16 @@ SECTOR_DATA = {
         "story": "Kolonie-Kaime auf dem roten Planeten. Die Bergungswerke werden angegriffen."},
     5: {"name": "DUNKLER SEKTOR",
         "story": "Quelle der Invasion. Hier steht das Herz der Feindflotte."},
+    # AUFTRAG 19 (PUNKT 2): Kampagnen-Erweiterung - die drei neuen
+    # Sektoren hinter dem Dunklen Sektor (gleiche 15-Stufen-Struktur,
+    # eigene Boss-Belegung siehe pve_system.BOSS_SECTOR_DATA, eigene
+    # Gegner-Paarungen automatisch durch den Spawn-Seed mit campaign_id).
+    6: {"name": "DER RISS",
+        "story": "Der Sprung durch den Riss ist gelungen. Dahinter koordinierte Flotten - kein wildes Chaos mehr."},
+    7: {"name": "NEBELKERN",
+        "story": "Ein Sternennebel voller Werft-Schleusen. Hier baut der Feind seine Schiffe."},
+    8: {"name": "KERNWELT",
+        "story": "Das Herz des Feindreichs. Hinter dem Kern steht nichts mehr - bring die Flotte nach Hause."},
 }
 
 
@@ -870,7 +977,7 @@ class Game:
         self.upgrade_fx = UpgradeFX()
         self.engine_effect = EngineEffect(0, 0)
         self.movement = ShipMovement()
-        self.fx = combat_fx.CombatFX()
+        self.fx = self._new_fx()   # PAKET A3: mit Kennungs-/Defekt-Pruefung
         self.damage_fx = DamageFX()   # PAKET 8.3: Treffer-Explosion am Schiff
         self.burn_fx = BurnFX()       # PAKET 8.7: Feuer ab < 50 % Huelle
         self.bg_fx = bg_fx.BgFX()     # PAKET 8.8: lebendiger Hintergrund
@@ -931,6 +1038,28 @@ class Game:
         self._idle_auto_t = 0.0        # Sekunden bis zum naechsten Auto-Collect
         self._idle_session_t = 0.0     # PAKET 8.8b: Idle-Dauer dieser Sitzung (8h-Max)
         self._save_heartbeat = 0.0     # Sekunden bis zur naechsten Sicherung
+
+    # ---------------- PAKET A3: Kampf-Effekt-Schutzschalter ----------------
+    @staticmethod
+    def _new_fx():
+        """Erzeugt die Kampf-Effekte. Traegt die combat_fx.py KEINE
+        A2-Kennung (alter Stand, Test-Stub wie in Paket A1 oder beschaedigte
+        Datei), greift der eingebaute Notfall-Renderer - Schuesse des Schiffs
+        und der Gegner bleiben garantiert sichtbar."""
+        if getattr(combat_fx, "FX_VERSION", "") == "A2":
+            return combat_fx.CombatFX()
+        _log.warning("combat_fx.py traegt keine A2-Kennung (alt/Stub/beschaedigt) "
+                     "- eingebauter Notfall-Renderer fuer Schuesse/Partikel aktiv.")
+        return _FallbackCombatFX()
+
+    def _fx_broken(self, where):
+        """PAKET A3: combat_fx wirft im Update/Draw einen Fehler ->
+        dauerhaft auf den Notfall-Renderer umschalten (einmalige Warnung
+        mit Stacktrace in corridor_slayer.log), Spiel laeuft weiter."""
+        if not isinstance(self.fx, _FallbackCombatFX):
+            _log.exception("combat_fx.%s fehlgeschlagen - Notfall-Renderer "
+                           "aktiv (Schuesse bleiben sichtbar)", where)
+            self.fx = _FallbackCombatFX()
 
     # ---------------- Hilfs-Loader / Prefs ----------------
     def _try_img(self, name, conv=True):
@@ -1137,10 +1266,17 @@ class Game:
         SCHRITT 3b: Dieselbe Formel wie das Live-Idle - Nominaler Kill-
         Ertrag der hoechsten Stufe (pve_system.stage_nominal_reward,
         gewichtetes Mittel des Spawn-Pools) x erwartete Kill-Rate
-        (IDLE_KPS, Messwert Live) x IDLE_EFFICIENCY, multipliziert mit
-        denselben Kill-Faktoren wie im Live-Gefecht (1 + idle_pct,
-        BAL_CREDITS, BAL_IDLE_CREDITS). Max. 8 h. Liefert None bei
-        kurzem Weg, erstem Start oder altem Save."""
+        (IDLE_KPS, Messwert Live), multipliziert mit denselben Kill-
+        Faktoren wie im Live-Gefecht (1 + idle_pct, BAL_CREDITS,
+        BAL_IDLE_CREDITS). Max. 8 h. Liefert None bei kurzem Weg, erstem
+        Start oder altem Save.
+        AUFTRAG 18 (PUNKT 1): AUFTRAG-5-Effizienz (flach 85 % ueber alle
+        8 h) abgeloest durch Stunden-Staffel (IDLE_TAPER: 1 h 55 %,
+        ab 3 h 30 %, ab 8 h 15 %) plus absoluten Deckel: EIN Bericht gibt
+        hoechstens den Ertrag von ~45 Min AKTIVEM Spielen der Beststufe
+        (idle_report_cap_credits). Vorher floetete EIN Bericht 46k-177k
+        Cr - die Kampagne war per Offline-Geld durchklickbar. NG+-Grad
+        erhoelt weiterhin die Beute (ng_reward_mult)."""
         prev = float(getattr(self.modules, "prev_saved_at", 0.0) or 0.0)
         if prev <= 0.0:
             return None
@@ -1149,8 +1285,11 @@ class Game:
             return None
         capped = min(away, rpg_config.IDLE_CAP_S)
         idle_pct = 0.0
+        credit_pct = 0.0
         if hasattr(self, "skills"):
-            idle_pct = float(self.skills.modifiers().get("idle_pct", 0.0))
+            _skill_mods = self.skills.modifiers()
+            idle_pct = float(_skill_mods.get("idle_pct", 0.0))
+            credit_pct = float(_skill_mods.get("credit_pct", 0.0))
         # SCHRITT 3b: Live-Formel statt der alten Naeherungskonstanten
         # (IDLE_CPS_BASE/IDLE_CPS_PER_STAGE) - Offline verdient jetzt
         # dasselbe pro virtuellem Kill wie das Live-Idle.
@@ -1162,8 +1301,11 @@ class Game:
             * rpg_config.ng_reward_mult(_ng)
         rate = nominal * rpg_config.IDLE_KPS \
             * (1.0 + idle_pct) * rpg_config.BAL_CREDITS \
-            * rpg_config.BAL_IDLE_CREDITS * rpg_config.IDLE_EFFICIENCY
-        credits = int(rate * capped)
+            * rpg_config.BAL_IDLE_CREDITS
+        # AUFTRAG 18: Stunden-Staffel (Taper) + Deckel am Aktiv-Ertrag.
+        credits = min(
+            int(rate * rpg_config.idle_tapered_seconds(capped)),
+            int(rpg_config.idle_report_cap_credits(nominal, credit_pct)))
         cores = min(rpg_config.IDLE_CORE_CAP,
                     int(capped * rpg_config.IDLE_KPS
                         / max(1, rpg_config.IDLE_CORE_KILLS)))
@@ -1605,10 +1747,20 @@ class Game:
         self.engine_effect.update(dt, engine_lvl)
 
         center = (self.fortress.x, self.fortress.y)
-        mounted_cannons = []
-        current_offset = self.debug_cannon_offset if self.debug_mode else CANNON_OFFSETS[0]
-        for ox, oy in [current_offset]:
-            mounted_cannons.append((center[0] + ox, center[1] + oy))
+        if self.debug_mode:
+            # Debug-Werkzeug: EINE frei verschiebbare Kanone (unveraendert)
+            mounted_cannons = [(center[0] + self.debug_cannon_offset[0],
+                                center[1] + self.debug_cannon_offset[1])]
+        else:
+            # PUNKT 6: EIN Turm am Original-Standpunkt (4, -14). Die Salve
+            # feuert cannon_count Projektile aus DIESEM einen Muzzle-Punkt
+            # (Punkt-3-Salvenlogik bleibt: gleiche Projektilzahl pro Salve
+            # -> gleiches DPS; nur die Deck-Punkte fallen auf den einen
+            # Original-Standpunkt zusammen und es wird EIN Turm gezeichnet).
+            combat_sel = self.idle_combat if self.idle_mode else self.pve
+            _muzzle = (center[0] + CANNON_OFFSETS[0][0],
+                       center[1] + CANNON_OFFSETS[0][1])
+            mounted_cannons = [_muzzle] * max(1, int(combat_sel.cannon_count))
 
         if self.state == self.PLAYING:
             combat = self.idle_combat if self.idle_mode else self.pve
@@ -1616,7 +1768,10 @@ class Game:
                 self.idle_combat.update(dt, center, mounted_cannons)
             else:
                 self.pve.update(dt, center, mounted_cannons)
-            self.fx.update(dt, combat, center)
+            try:   # PAKET A3: Defekt-Schutzschalter
+                self.fx.update(dt, combat, center)
+            except Exception:
+                self._fx_broken("update")
             # PAKET 8.3: Einschlags-FX am Schiff aktualisieren (update + decay)
             ship_wx, ship_wy = self.movement.get_position(self.fortress.x,
                                                           self.fortress.y)
@@ -1665,9 +1820,11 @@ class Game:
                 result = self.pve.get_result()
                 if result["won"] and self.state == self.PLAYING:
                     # AUFTRAG 6: Endspiel-Erkennung VOR complete_stage -
-                    # Sektor 5 ist die letzte Kampagne (Karte kennt nur 1-5),
-                    # Stufe 15 deren Finale. Dann: VICTORY-Screen + NG+.
-                    final_win = (self.selected_sector == 5
+                    # AUFTRAG 19: die letzte Kampagne ist Sektor
+                    # rpg_config.CAMPAIGN_COUNT (jetzt 8), Stufe 15 deren
+                    # Finale. Dann: VICTORY-Screen + NG+.
+                    final_win = (self.selected_sector
+                                 == rpg_config.CAMPAIGN_COUNT
                                  and self.pve.stage_id == 15)
                     self.modules.complete_stage(
                         campaign_id=self.selected_sector,
@@ -1694,7 +1851,10 @@ class Game:
                     SFX.play_victory_audio()
                     return
         elif self.state != self.PAUSED:
-            self.fx.update(dt, None)
+            try:   # PAKET A3: Defekt-Schutzschalter
+                self.fx.update(dt, None)
+            except Exception:
+                self._fx_broken("update")
             self.damage_fx.update(dt, None)   # PAKET 8.3: Shake/Vignette klingen ab
 
     def credits_display(self):
@@ -1704,7 +1864,10 @@ class Game:
     # ---------------- Aktionen (Fire-on-Release) ----------------
     def _fire(self, bid):
         SFX.play("click", 0.4)
-        if bid in ("snd_menu", "snd_res", "snd_stg"):
+        # PUNKT-4-FIX: snd_q (Quests) und snd_s (Beschwoerung) waren im
+        # Tupel nicht enthalten - die Buttons wurden gezeichnet, ein Klick
+        # tat aber nichts. Jetzt schalten alle fuenf Sound-Icons um.
+        if bid in ("snd_menu", "snd_res", "snd_stg", "snd_q", "snd_s"):
             self._toggle_sound()
             return
         st = self.state
@@ -1939,6 +2102,19 @@ class Game:
             if bid == "vic_skip":
                 if self.victory_frames:
                     self.victory_timer = len(self.victory_frames) / 30.0
+            elif bid == "vic_next":
+                # AUFTRAG 20 (PUNKT 3): naechste Etage DIREKT aus dem
+                # Sieg-Screen starten - kein Zwangsrückweg zur Karte.
+                nxt = self._next_stage_target()
+                if nxt is None:
+                    self.show_message("Kein Folgeeinsatz verfuegbar")
+                    return
+                SFX.stop_music()
+                self.victory_timer = 0.0
+                campaign, stage, _label = nxt
+                self._map_deselect()
+                self.selected_sector = campaign
+                self._try_enter_stage(stage)
             elif bid == "vic_continue":
                 SFX.stop_music()
                 campaign = self.selected_sector if self.selected_sector > 0 else self.pve.campaign_id
@@ -2024,8 +2200,11 @@ class Game:
             self.map_scene.abort()   # PAKET 7F: Szene schliesst beim Einsatz
             # PAKET 7C: Wiederholung einer bereits geschafften Stufe?
             repeat = (sector, stage) in self.modules.completed_stages
+            # A2: NG+-Grad mitgeben (fehlerhaft in A1 vergessen - die
+            # Gegner-/Beute-Skalierung griff auf Karten-Einsaetzen nicht).
             self.pve = PvECombat(is_idle=False, campaign_id=sector, stage_id=stage,
-                                 ship_level=self.modules.ship_level, is_repeat=repeat)
+                                 ship_level=self.modules.ship_level, is_repeat=repeat,
+                                 ng_plus=int(getattr(self.modules, "ng_plus", 0)))
             self._sync_modules_to_combat()
             self.quests.begin_mission()   # PAKET 8: Mission startet 'clean'
             self.state = self.PLAYING
@@ -2072,6 +2251,12 @@ class Game:
         if oid.startswith("sector_"):
             sec = int(oid.split("_")[1])
             if sec > mods.highest_campaign:
+                # A2: Sperr-FRUEHWARNUNG statt stiller Abbruch (Nutzer:
+                # "die Kampagnen sollten gesperrt sein. Sprich Erde
+                # abgeschlossen, dann kann man zum naechsten Planeten").
+                self.show_message(
+                    f"SEKTOR {sec} GESPERRT  ·  schliesse erst Sektor "
+                    f"{sec - 1} (Stufe 15) ab")
                 return
             self.selected_sector = sec
             stage = mods.highest_stage if sec == mods.highest_campaign else 15
@@ -2089,10 +2274,11 @@ class Game:
         self._map_deselect()
 
     def _map_states(self):
-        """Status aller Kartenobjekte (Daten: module_system - unveraendert)."""
+        """Status aller Kartenobjekte (Daten: module_system - unveraendert).
+        AUFTRAG 19: dynamisch ueber ALLE Sektoren (rpg_config.CAMPAIGN_COUNT)."""
         mods = self.modules
         states = {}
-        for sec in (1, 2, 3, 4, 5):
+        for sec in range(1, rpg_config.CAMPAIGN_COUNT + 1):
             done = sum(1 for (c, _s) in mods.completed_stages if c == sec)
             if sec in mods.completed_campaigns:
                 status, scol, col = "ABGESCHLOSSEN", GREEN, GREEN
@@ -2582,6 +2768,31 @@ class Game:
             ui["def_tap"] = Btn("def_tap", pygame.Rect(0, 0, W, H))
         return ui
 
+    def _next_stage_target(self):
+        """AUFTRAG 20 (PUNKT 3): Ziel des NAECHSTE-Buttons nach einem
+        Etappensieg - Stufe+1 im selben Sektor, oder nach Stufe 15 die
+        Stufe 1 des eben freigeschalteten Folgesektors. Liefert
+        (campaign, stage, button_label) oder None, wenn es keinen
+        freigeschalteten Folgeeinsatz gibt (Kampagnen-Finale laeuft
+        ueber den VICTORY-Screen, Sperrfall bleibt eindeutig)."""
+        campaign = self.selected_sector if self.selected_sector > 0 \
+            else self.pve.campaign_id
+        stage = int(self.pve.stage_id)
+        if stage < 15:
+            nxt = stage + 1
+        else:
+            if campaign >= rpg_config.CAMPAIGN_COUNT:
+                return None          # Finale: VICTORY-Screen + NG+ uebernimmt
+            campaign += 1
+            nxt = 1
+        unlocked = (campaign < self.modules.highest_campaign
+                    or (campaign == self.modules.highest_campaign
+                        and nxt <= self.modules.highest_stage))
+        if not unlocked:
+            return None
+        label = "NÄCHSTE KAMPAGNE" if stage >= 15 else "NÄCHSTE STUFE"
+        return (campaign, nxt, label)
+
     def _layout_clear(self):
         W, H = ui_kit.W, ui_kit.H
         ui = {}
@@ -2589,11 +2800,28 @@ class Game:
         if not ended:
             ui["vic_skip"] = Btn("vic_skip", pygame.Rect(0, 0, W, H))
             return ui
-        bw = int(W * 0.62)
-        bh = int(btn_h() * 1.25)
-        ui["vic_continue"] = Btn("vic_continue",
-                                 pygame.Rect((W - bw) // 2, int(H * 0.66), bw, bh),
-                                 "WEITER", "", CYAN)
+        # AUFTRAG 20 (PUNKT 3): ZWEI Buttons - "NÄCHSTE STUFE" startet die
+        # Folgetage direkt aus dem Sieg-Screen heraus (Spielfluss, keine
+        # Rückkehr zur Karte nötig), "ZUR KARTE" bleibt wie bisher
+        # erreichbar. Ohne Folgeeinsatz nur der Karten-Button (wie vorher).
+        nxt = self._next_stage_target()
+        if nxt is not None:
+            bw = int(W * 0.44)
+            gap = u(12)
+            x0 = (W - (bw * 2 + gap)) // 2
+            y = int(H * 0.66)
+            bh = int(btn_h() * 1.25)
+            ui["vic_next"] = Btn("vic_next", pygame.Rect(x0, y, bw, bh),
+                                 nxt[2], "", VIOLET)
+            ui["vic_continue"] = Btn("vic_continue",
+                                     pygame.Rect(x0 + bw + gap, y, bw, bh),
+                                     "ZUR KARTE", "", CYAN)
+        else:
+            bw = int(W * 0.62)
+            bh = int(btn_h() * 1.25)
+            ui["vic_continue"] = Btn("vic_continue",
+                                     pygame.Rect((W - bw) // 2, int(H * 0.66), bw, bh),
+                                     "ZUR KARTE", "", CYAN)
         return ui
 
     def _layout_intro(self):
@@ -3188,7 +3416,13 @@ class Game:
         angle = self.movement.get_angle()
         ex, ey = T(ship_x + self.debug_engine_offset[0], ship_y + self.debug_engine_offset[1])
         self.engine_effect.set_position(ex, ey)
-        self.engine_effect.draw(SCREEN)
+        # PUNKT-6-WIEDERHERSTELLUNG (Triebwerk): gezeichnet wird der Strahl
+        # erst NACH dem Schildring - die Schild-PNGs der Stufen 1-8 tragen
+        # ein im Alpha-Kanal eingebettetes Schachbrett (Exportfehler der
+        # Paket-Grafik) und wuerden den additiven Triebwerks-Glow sonst
+        # grau ueberdecken (Nutzer: "Verschwundene Triebwerkseffekte").
+        # Die Position bleibt hier gesetzt; das draw() folgt unten nach
+        # dem Schild-Blit.
 
         sx, sy = T(ship_x, ship_y)
         schild_lvl = self.modules.get("schild").level
@@ -3204,6 +3438,11 @@ class Game:
                 SCREEN.blit(sh_img, sh_img.get_rect(center=(int(sx), int(sy))))
             pygame.draw.circle(SCREEN, (0, 255, 255), (int(sx), int(sy)), int(rad + pulse), 2)
             pygame.draw.circle(SCREEN, (0, 180, 200), (int(sx), int(sy)), int(rad + pulse + 5 * s), 1)
+
+        # PAKET 7E: Triebwerks-FX - JETZT zeichnen, ueber dem Schildring
+        # (Grund siehe Kommentar oben). Der Strahl laeuft vom Heck nach
+        # links aus und liegt damit nie unter der Schild-Grafik.
+        self.engine_effect.draw(SCREEN)
 
         base = getattr(self.fortress, "_base_image", None)
         if base:
@@ -3297,6 +3536,9 @@ class Game:
         # kanonen/kanonen_lvl_<1..12>.png; fehlt ein Bild, liefert der
         # Loader automatisch die naechstniedrigere vorhandene Stufe.
         kanonen_lvl = self.modules.get("kanonen").level
+        # PUNKT 6: urspruengliches Kanonen-Design - EIN Geschuetzturm am
+        # Original-Standpunkt (siehe Kommentar bei CANNON_OFFSETS bzw. im
+        # update()). Die Salve feuert aus diesem einen Turm.
         current_offset = self.debug_cannon_offset if self.debug_mode else CANNON_OFFSETS[0]
         cox, coy = current_offset
         cx, cy = T(ship_x + cox, ship_y + coy)
@@ -3348,7 +3590,14 @@ class Game:
                                    scale=sc * s * 1.15, level=hang_l)
 
         # Kampfeffekte: Projektiloptik, Spuren, Treffer, Explosionen, Muzzle
-        self.fx.draw(SCREEN, combat, T, s, self.elapsed)
+        # PAKET A3: Wirft combat_fx einen Fehler, schaltet der Schutzschalter
+        # dauerhaft auf den eingebauten Notfall-Renderer um und zeichnet
+        # sofort - Schuesse/Partikel bleiben sichtbar, kein stummer Defekt.
+        try:
+            self.fx.draw(SCREEN, combat, T, s, self.elapsed)
+        except Exception:
+            self._fx_broken("draw")
+            self.fx.draw(SCREEN, combat, T, s, self.elapsed)
         # PAKET 8.3: Einschlags-Explosion am Schiff (Ringe, Funken, Flash)
         self.damage_fx.draw_world(SCREEN, T, self.elapsed)
         # PAKET 8.7: Feuer/Rauch/Funken am angeschlagenen Schiff (< 50 % HP)
@@ -3477,6 +3726,12 @@ class Game:
                       (card.centerx, card.y + u(88)), "center", 1)
 
     def draw_stage_clear(self):
+        """AUFTRAG 20 (PUNKT 3): Sieg-Screen mit ETAPPEN-UEBERSICHT -
+        Sektor/Stufe eindeutig identifiziert, Belohnung (Credits, XP,
+        Levelaufstieg) sichtbar, und die Folgetage DIREKT startbar
+        (NÄCHSTE STUFE / NÄCHSTE KAMPAGNE) ohne Rückkehr zur Karte;
+        "ZUR KARTE" bleibt daneben erreichbar. Der Spielstand wurde
+        bereits in complete_stage gesichert."""
         W, H = ui_kit.W, ui_kit.H
         self._ui = self._layout_clear()
         if self.victory_frames:
@@ -3487,7 +3742,12 @@ class Game:
             overlay(SCREEN, 90)
         else:
             overlay(SCREEN, 150)
+        sector = self.selected_sector if self.selected_sector > 0 \
+            else self.pve.campaign_id
+        sdata = SECTOR_DATA.get(sector, {"name": "UNBEKANNT"})
         neon_text(SCREEN, "STUFE GESCHAFFT!", F(24), GREEN, (W // 2, int(H * 0.44)), "midtop", 2)
+        neon_text(SCREEN, f"SEKTOR {sector} · {sdata['name']}  ·  STUFE {self.pve.stage_id}",
+                  F(12), CYAN, (W // 2, int(H * 0.44) + u(22)), "midtop", 1)
         neon_text(SCREEN, f"+{self.last_stage_reward:,} CREDITS", F(15), WHITE,
                   (W // 2, int(H * 0.44) + u(44)), "midtop", 1)
         # PAKET 8: Spieler-XP fuer die Mission + Levelaufstiege anzeigen
@@ -3502,11 +3762,12 @@ class Game:
             draw_compact_btn(SCREEN, b, pressed=self._pressed(bid))
 
     def draw_victory(self):
-        """AUFTRAG 6: Endscreen nach Kampagne 5 (Sektor 5, Stufe 15).
+        """AUFTRAG 6: Endscreen nach der LETZTEN Kampagne (Sektor
+        rpg_config.CAMPAIGN_COUNT - seit AUFTRAG 19 Sektor 8, Stufe 15).
         Nutzt dasselbe Victory-Video + die gleichen Buttons wie STAGE_CLEAR,
         zeigt aber das Kampagnen-Finale und den freigeschalteten NG+-Grad.
-        WEITER fuehrt zurueck zur Karte - der naechste Einsatz laeuft mit
-        skalierten Gegnern (rpg_config.NG_*)."""
+        ZUR KARTE fuehrt zurueck zur Karte - der naechste Einsatz laeuft
+        mit skalierten Gegnern (rpg_config.NG_*)."""
         W, H = ui_kit.W, ui_kit.H
         self._ui = self._layout_clear()
         if self.victory_frames:
@@ -3518,7 +3779,7 @@ class Game:
         else:
             overlay(SCREEN, 170)
         gold = (255, 190, 76)
-        neon_text(SCREEN, "KAMPAGNE 5 ABGESCHLOSSEN!", F(23), gold,
+        neon_text(SCREEN, f"KAMPAGNE {rpg_config.CAMPAIGN_COUNT} ABGESCHLOSSEN!", F(23), gold,
                   (W // 2, int(H * 0.36)), "midtop", 2)
         ng = int(getattr(self.modules, "ng_plus", 0))
         neon_text(SCREEN, f"DIE GALAXIE IST BEFREIT  ·  NEW GAME+ {ng} AKTIV",

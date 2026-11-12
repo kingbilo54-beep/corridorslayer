@@ -53,17 +53,26 @@ PROFILES = {
                              "reaktor": 6, "hangar": 6, "radar": 5, "reparatur": 5},
     "Schiff 11-12":         {"kanonen": 13, "antrieb": 9, "huelle": 8, "schild": 7,
                              "reaktor": 7, "hangar": 7, "radar": 6, "reparatur": 6},
+    # AUFTRAG 19 (PUNKT 2): Endstufen-Profile fuer die Sektoren 6-8.
+    # Kanonen/Rumpf nahe am Maximum (15/12) - die neuen Sektoren sind das
+    # Ende der Progressionsleiter, erreichbar erst mit weitgehend
+    # ausgebautem Schiff (Gegene-HP x3.7-x6.25 gegenueber Sektor 1).
+    "Schiff 12 - Endstufe": {"kanonen": 15, "antrieb": 10, "huelle": 9, "schild": 8,
+                             "reaktor": 8, "hangar": 8, "radar": 7, "reparatur": 7},
 }
 PROFILE_HULL = {"Schiff 4 - knapp": 1, "Schiff 4 - Normal": 2,
                 "Schiff 5 - gewachsen": 2, "Schiff 6-7": 3, "Schiff 8-9": 4,
-                "Schiff 9-10": 5, "Schiff 11-12": 6}
+                "Schiff 9-10": 5, "Schiff 11-12": 6, "Schiff 12 - Endstufe": 7}
 
 # Referenzprofil je Sektor (was ein Spieler dort typischerweise hat)
 SEKTOR_PROFILE = {1: ["Schiff 4 - Normal", "Schiff 5 - gewachsen"],
                   2: ["Schiff 6-7"],
                   3: ["Schiff 8-9"],
                   4: ["Schiff 9-10"],
-                  5: ["Schiff 11-12"]}
+                  5: ["Schiff 11-12"],
+                  6: ["Schiff 11-12", "Schiff 12 - Endstufe"],
+                  7: ["Schiff 12 - Endstufe"],
+                  8: ["Schiff 12 - Endstufe"]}
 
 SHIP_X = 150.0            # typische Schiffsposition (Welt-px)
 TARGET_X = 450.0          # ab hier ist ein Gegner zielbar (pve_system)
@@ -156,7 +165,7 @@ def main():
     print(f"  Kampagnen-Beute-Faktoren: {rcfg.CAMPAIGN_REWARD_MULT}")
     print("  Trefferquoten gegnerischer Schuesse: passiv 0.87 / aktiv 0.45")
 
-    for camp in (1, 2, 3, 4, 5):
+    for camp in range(1, rcfg.CAMPAIGN_COUNT + 1):
         profiles = SEKTOR_PROFILE[camp]
         print("")
         print("#" * 100)

@@ -80,12 +80,26 @@ BAL_COST_MULT = 5.6
 # (die Bosswerte von Stufe 10/15 wurden in pve_system.BOSS_DATA direkt
 # auf dieses Niveau nachjustiert). Die Werte hier heben die SEKTOREN 2-5
 # darueber an. Simulierbar ueber tools/simulate_campaign.py.
-CAMPAIGN_HP_MULT     = {1: 1.0, 2: 1.30, 3: 1.70, 4: 2.20, 5: 2.85}
-CAMPAIGN_DMG_MULT    = {1: 1.0, 2: 1.15, 3: 1.32, 4: 1.52, 5: 1.75}
-CAMPAIGN_REWARD_MULT = {1: 1.0, 2: 1.12, 3: 1.26, 4: 1.42, 5: 1.60}
+# AUFTRAG 19 (PUNKT 2): Die Ketten sind auf SEKTOREN 6-8 fortgesetzt
+# (gleiche je-Sektor-Schritte wie 1->5: HP ~x1.30, DMG ~x1.15, Beute
+# ~x1.13, Spawn-Takt ~-6 %). Die Spieler-Ausruestung ist dagegen
+# gedeckelt (Module max L15, Schiff max L12) - die neuen Sektoren sind
+# bewusst das Ende der Progressionsleiter, erreichbar erst mit
+# weitgehend ausgebautem Schiff (siehe Profile in simulate_campaign).
+CAMPAIGN_HP_MULT     = {1: 1.0, 2: 1.30, 3: 1.70, 4: 2.20, 5: 2.85,
+                        6: 3.70, 7: 4.80, 8: 6.25}
+CAMPAIGN_DMG_MULT    = {1: 1.0, 2: 1.15, 3: 1.32, 4: 1.52, 5: 1.75,
+                        6: 2.01, 7: 2.32, 8: 2.67}
+CAMPAIGN_REWARD_MULT = {1: 1.0, 2: 1.12, 3: 1.26, 4: 1.42, 5: 1.60,
+                        6: 1.80, 7: 2.03, 8: 2.30}
 # Spawn-Intervall-Faktor (multipliziert die Pause zwischen zwei Spawns;
 # kleiner = Gegner kommen schneller nach). Kampagne 1 unveraendert.
-CAMPAIGN_SPAWN_SPD   = {1: 1.0, 2: 0.93, 3: 0.87, 4: 0.80, 5: 0.75}
+CAMPAIGN_SPAWN_SPD   = {1: 1.0, 2: 0.93, 3: 0.87, 4: 0.80, 5: 0.75,
+                        6: 0.71, 7: 0.67, 8: 0.63}
+# AUFTRAG 19: EINE Zahl fuer "wie viele Sektoren hat die Kampagne"
+# (Karte, Sperrlogik, Endspiel-Erkennung, Simulatoren). Sektor 1-5 sind
+# der historische Bestand, 6-8 die Erweiterung.
+CAMPAIGN_COUNT = 8
 
 # ----------------------------------------------------------------------
 # SPIELERLEVEL / XP-KURVE (zentral konfigurierbar)
@@ -367,12 +381,71 @@ IDLE_CPS_PER_STAGE = 0.075         # seit SCHRITT 3b unbenutzt (dto.)
 #                     (1 Core je 60 echten Kills, ~4-5 min).
 #   IDLE_CORE_CAP   : 14 -> 20 - Deckel passt zum hoeheren Core-Zufluss
 #                     (8 h ergeben jetzt ~32 Cores, gedeckelt bei 20).
-IDLE_EFFICIENCY = 0.85             # Offline bringt 85 % des Live-Ertrags
+IDLE_EFFICIENCY = 0.85             # ALT (AUFTRAG 5) - seit AUFTRAG 18 abgeloest
+                                   # durch IDLE_TAPER/Deckel unten; Wert bleibt
+                                   # nur fuer alte Tools zurueckkompatibel stehen.
 IDLE_KPS = 0.22                    # virtuelle Abschuesse/s (Messwert Live)
 IDLE_CORE_KILLS = 200              # 1 Data Core je so viele virtuelle Kills
 IDLE_CORE_CAP = 20                 # Core-Deckel pro Bericht
 IDLE_AUTOCOLLECT_S = 8.0           # Live: alle 8 s in die Wallet ueberweisen
 IDLE_SAVE_HEARTBEAT_S = 30.0       # alle 30 s sichern (saved_at bleibt frisch)
+
+# ----------------------------------------------------------------------
+# AUFTRAG 18 (PUNKT 1): OFFLINE-BREMSUNG (Nutzer-Feedback: "Beim erneuten
+# Einloggen erhalte ich teilweise rund 69.000 Credits ... Kampagne wird
+# viel zu einfach").
+# Ursache (Analyse scripts/analyse_economy.py, Stand ec61d43):
+#   SCHRITT 3b (Offline zahlt den NOMINALEN Beststufen-Ertrag) plus
+#   AUFTRAG 5 (IDLE_EFFICIENCY 0.85, flach ueber alle 8 h) floeten EINEN
+#   Bericht mit 46.652 Cr (Fruehspiel, leere Skills) bis 177.440 Cr
+#   (NG+ Endspiel) - ein ganzer Werft-Modul-Kauf (Schild L7 = 23.488 Cr
+#   bei BAL_COST_MULT 5.6) war damit eine Nebensache, mehrere Module auf
+#   einmal kaufbar -> Kampagne per Offline-Geld durchklickbar.
+# Neu (Wirkt NUR auf den Offline-Bericht; Live-Idle und aktives Gefecht
+#   unveraendert; Upgrade-Preise unveraendert):
+#   * IDLE_TAPER - Stunden-Staffel: 1. Stunde 55 %, Stunden 2-3 30 %,
+#     Stunden 4-8 15 %. Ein voller 8h-Bericht entspricht ~2.3 "vollen"
+#     Stunden statt 8. Lange Abwesenheit bleibt spuerbar belohnt,
+#     amortisiert aber nicht mehr das halbe Werft-Angebot.
+#   * IDLE_ACTIVE_KPM + IDLE_REPORT_ACTIVE_MIN - absoluter Deckel: EIN
+#     Bericht gibt hoechstens so viel wie ~45 Min AKTIVES Spielen der
+#     Beststufe (nominal x 18 Kills/min x BAL_CREDITS). Offline kann den
+#     Aktiv-Ertrag nie uebertreffen - die Kampagne ist nicht mehr mit
+#     Abwesenheits-Geld kaufbar.
+#   Ergebnis 8h-Bericht (Simulation): Fruehspiel ~11k, Mitte ~18k,
+#   Endspiel ~23k Cr - 1-2 sinnvolle Kaeufe statt 5-10.
+# ----------------------------------------------------------------------
+IDLE_TAPER = ((3600, 0.55), (10800, 0.30), (8 * 3600, 0.15))
+IDLE_ACTIVE_KPM = 18               # konservative aktive Kills/min (Simulator-Messwert)
+IDLE_REPORT_ACTIVE_MIN = 45        # Bericht <= Ertrag von 45 Min aktivem Spielen
+
+
+def idle_tapered_seconds(capped_s):
+    """Effektiv verguetete Sekunden unter der Stunden-Staffel (AUFTRAG 18).
+    capped_s = min(Abwesenheit, IDLE_CAP_S). Jede Staffel-Stufe ist ein
+    (Sekunden-Ende, Effizienz)-Paar; die letzte Staffel gilt bis
+    IDLE_CAP_S."""
+    capped_s = max(0.0, float(capped_s))
+    total = 0.0
+    prev = 0.0
+    for limit, eff in IDLE_TAPER:
+        seg = min(capped_s, float(limit)) - prev
+        if seg > 0.0:
+            total += seg * eff
+        prev = float(limit)
+        if capped_s <= prev:
+            break
+    return total
+
+
+def idle_report_cap_credits(nominal, credit_pct=0.0):
+    """Absoluter Berichts-Deckel (AUFTRAG 18): Ertrag von
+    IDLE_REPORT_ACTIVE_MIN Minuten aktiver Beststufe. nominal ist der
+    nominale Kill-Ertrag (pve_system.stage_nominal_reward, vor allen
+    Multiplikatoren), credit_pct der Skill-Bonus wie im aktiven Gefecht."""
+    minutes = float(IDLE_REPORT_ACTIVE_MIN)
+    return nominal * float(IDLE_ACTIVE_KPM) * minutes \
+        * float(BAL_CREDITS) * (1.0 + max(0.0, float(credit_pct)))
 
 # ----------------------------------------------------------------------
 # AUFTRAG 6: NEW GAME+ (nach Kampagne 5)

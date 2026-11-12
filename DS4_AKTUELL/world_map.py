@@ -46,7 +46,14 @@ from ui_kit import (u, F, text, neon_text, radial_glow, glass_panel, draw_icon,
 # Hinweis: Werte hier feinjustieren, falls Objekte im echten Bild leicht
 #          anders liegen (Debug-Modus F1 zeigt Hitboxen auf der Karte an).
 SECTOR_UV = {1: (0.50, 0.78), 2: (0.22, 0.55), 3: (0.78, 0.52),
-             4: (0.28, 0.30), 5: (0.75, 0.17)}
+             4: (0.28, 0.30), 5: (0.75, 0.17),
+             # AUFTRAG 19 (PUNKT 2): Sektoren 6-8 hinter dem Dunklen
+             # Sektor - der Weg fuehrt weiter in den Feindraum (oben
+             # Mitte -> oben links -> Zentrum rechts, alle Positionen
+             # kollisionsfrei zu Objekt-Radien + Touch-Puffer, geprueft
+             # in tools/check_campaign.py). Route baut sich automatisch
+             # aus sorted(SECTOR_UV.keys()).
+             6: (0.46, 0.13), 7: (0.19, 0.14), 8: (0.66, 0.38)}
 
 OBJECTS = [
     # AUFTRAG 17: Planeten/Signale ~25 % groesser (rad relativ zur Bildhoehe)
@@ -62,6 +69,14 @@ OBJECTS = [
      "uv": SECTOR_UV[4], "rad": 0.074, "name": "MARS"},
     {"id": "sector_5", "kind": "sector", "sector": 5, "shape": "circle",
      "uv": SECTOR_UV[5], "rad": 0.084, "name": "DUNKLER SEKTOR"},
+    # AUFTRAG 19: die drei neuen Kampagnen-Abschnitte (keine neuen
+    # Grafiken - dieselben Formen/Farben wie die alten Sektoren).
+    {"id": "sector_6", "kind": "sector", "sector": 6, "shape": "ring",
+     "uv": SECTOR_UV[6], "rad": 0.078, "name": "DER RISS"},
+    {"id": "sector_7", "kind": "sector", "sector": 7, "shape": "hex",
+     "uv": SECTOR_UV[7], "rad": 0.080, "name": "NEBELKERN"},
+    {"id": "sector_8", "kind": "sector", "sector": 8, "shape": "circle",
+     "uv": SECTOR_UV[8], "rad": 0.094, "name": "KERNWELT"},
     {"id": "signal_a", "kind": "signal", "shape": "diamond",
      "uv": (0.115, 0.335), "rad": 0.047, "name": "FEINDSIGNALE"},
     {"id": "signal_b", "kind": "signal", "shape": "diamond",

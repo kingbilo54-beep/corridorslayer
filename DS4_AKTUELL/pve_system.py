@@ -53,60 +53,150 @@ def _folder(name, old_abs):
 ENEMY_FOLDER = _folder("enemys",
                        r"C:\Users\bsahi\Desktop\corridorSlayers\DS4\enemys")
 
-# PAKET 8.2: Eingebauter Gegner-Roster als Fallback, falls game_data.xlsx
-# fehlt (Distribution ohne Excel). Excel bleibt Vorrang, sobald sie
-# existiert. In den Spawn-Pool kommt nur, wer eine Datei
-# enemys/enemy_<key>.png hat (Pruefung in _spawn_single_enemy).
+# PAKET 8.2 + PUNKT-4-ABGLEICH: Eingebauter Gegner-Roster als Fallback,
+# falls game_data.xlsx fehlt (Distribution ohne Excel). Seit dem Abgleich
+# ist er 1:1 deckungsgleich mit dem Sheet "Enemies" der game_data.xlsx -
+# dieselben 16 Typen, dieselben Werte, inkl. Min_Ship_Level. Excel bleibt
+# Vorrang, sobald sie existiert; der PVE88-Merge unten ist bei der
+# abgeglichenen Excel eine No-Op und schuetzt nur noch gegen AELTERE
+# Excel-Dateien (ohne die Spalte Min_Ship_Level / neue Typen).
+# Pool-Regeln (unveraendert): Nur wer Min_Ship_Level <= Schiffslevel und
+# Spawn_Weight > 0 hat UND eine Datei enemys/enemy_<key>.png besitzt,
+# kommt in den Spawn-Pool (Pruefung in _spawn_single_enemy).
+#   shard/husk/wraith/hive : GEPARKT (Min_Ship_Level 99 haelt sie aus
+#     jedem Pool heraus - Grafiken vorhanden, Freischaltung ist eine
+#     spaetere Balancing-Entscheidung, hier nur Datensatz wie zuvor im
+#     alten Fallback).
+#   destroyer/bomber/frigate/boss : Alt-Excel-Datensaetze OHNE Grafik -
+#     spawnen nie, zaehlen aber weiterhin im nominalen Beute-Mittel
+#     (stage_nominal_reward), genau wie vor dem Abgleich.
+#   Idle_HP_Mult/Idle_Speed_Mult sind Alt-Excel-Datenbestand und werden
+#     im Code nicht gelesen (bei carrier + allen 8 neuen Typen undefiniert).
 # Skalierung: HP(w) = (Base_HP + w*HP_Add) * HP_Mult^w * BAL_ENEMY_HP
 #             DMG(w) = (Base_Damage + w*Dmg_Add) * BAL_ENEMY_DMG
 if not ENEMY_DATA:
     ENEMY_DATA = {
         # Swarman-Droene (magenta) - Startgegner, schnell & schwach
-        "skitter": {"Base_HP": 20, "Base_Speed": 55, "Base_Damage": 5,
+        "skitter": {"Base_HP": 20, "Base_Speed": 60, "Base_Damage": 5,
                     "Base_Reward": 10, "Min_Ship_Level": 1,
-                    "Spawn_Weight": 46, "HP_Add_Per_Stage": 6,
-                    "HP_Mult_Per_Stage": 1.04, "Speed_Add_Per_Stage": 0.4,
-                    "Damage_Add_Per_Stage": 1.2, "Idle_Reward_Mult": 1.0},
+                    "Spawn_Weight": 60, "HP_Add_Per_Stage": 15,
+                    "HP_Mult_Per_Stage": 1.08, "Speed_Add_Per_Stage": 2,
+                    "Damage_Add_Per_Stage": 2, "Idle_HP_Mult": 0.3,
+                    "Idle_Speed_Mult": 0.5, "Idle_Reward_Mult": 1.0},
+        # Void Lancer - normaler Gegner (Excel-Stand; der ALTE Fallback
+        # behandelte lancer als Stufe-15-Boss, seit PAKET 8.8 laufen die
+        # Bosse ueber BOSS_DATA - lancer ist seitdem wieder regulier).
+        "lancer": {"Base_HP": 80, "Base_Speed": 30, "Base_Damage": 15,
+                   "Base_Reward": 25, "Min_Ship_Level": 1,
+                   "Spawn_Weight": 20, "HP_Add_Per_Stage": 40,
+                   "HP_Mult_Per_Stage": 1.1, "Speed_Add_Per_Stage": 1,
+                   "Damage_Add_Per_Stage": 3, "Idle_HP_Mult": 0.4,
+                   "Idle_Speed_Mult": 0.6, "Idle_Reward_Mult": 1.2},
+        # Interceptor - basis der Boss-Stufe 5 (TARNJAEGER, eigene Werte
+        # in BOSS_DATA); hier die regulier-Excel-Zeile
+        "interceptor": {"Base_HP": 40, "Base_Speed": 80, "Base_Damage": 8,
+                        "Base_Reward": 15, "Min_Ship_Level": 1,
+                        "Spawn_Weight": 10, "HP_Add_Per_Stage": 20,
+                        "HP_Mult_Per_Stage": 1.09, "Speed_Add_Per_Stage": 3,
+                        "Damage_Add_Per_Stage": 2, "Idle_HP_Mult": 0.35,
+                        "Idle_Speed_Mult": 0.6, "Idle_Reward_Mult": 1.1},
+        # Alt-Excel-Datensatz OHNE Grafik (spawn nie, nur Beute-Mittel)
+        "destroyer": {"Base_HP": 150, "Base_Speed": 20, "Base_Damage": 25,
+                      "Base_Reward": 50, "Min_Ship_Level": 1,
+                      "Spawn_Weight": 5, "HP_Add_Per_Stage": 60,
+                      "HP_Mult_Per_Stage": 1.12, "Speed_Add_Per_Stage": 0.5,
+                      "Damage_Add_Per_Stage": 5, "Idle_HP_Mult": 0.3,
+                      "Idle_Speed_Mult": 0.4, "Idle_Reward_Mult": 1.5},
+        # Gruener Kreuzer - schwerer Trefferblock (Elite-Gegner, PVE88)
+        "carrier": {"Base_HP": 190, "Base_Speed": 22, "Base_Damage": 15,
+                    "Base_Reward": 58, "Min_Ship_Level": 8,
+                    "Spawn_Weight": 8, "HP_Add_Per_Stage": 24,
+                    "HP_Mult_Per_Stage": 1.06, "Speed_Add_Per_Stage": 0.15,
+                    "Damage_Add_Per_Stage": 2.0, "Idle_Reward_Mult": 1.15},
+        # Alt-Excel-Datensatz OHNE Grafik (spawn nie, nur Beute-Mittel)
+        "bomber": {"Base_HP": 60, "Base_Speed": 40, "Base_Damage": 20,
+                   "Base_Reward": 30, "Min_Ship_Level": 1,
+                   "Spawn_Weight": 8, "HP_Add_Per_Stage": 30,
+                   "HP_Mult_Per_Stage": 1.09, "Speed_Add_Per_Stage": 1,
+                   "Damage_Add_Per_Stage": 4, "Idle_HP_Mult": 0.35,
+                   "Idle_Speed_Mult": 0.5, "Idle_Reward_Mult": 1.2},
+        # Alt-Excel-Datensatz OHNE Grafik (spawn nie, nur Beute-Mittel)
+        "frigate": {"Base_HP": 100, "Base_Speed": 35, "Base_Damage": 12,
+                    "Base_Reward": 40, "Min_Ship_Level": 1,
+                    "Spawn_Weight": 6, "HP_Add_Per_Stage": 50,
+                    "HP_Mult_Per_Stage": 1.11, "Speed_Add_Per_Stage": 1.5,
+                    "Damage_Add_Per_Stage": 3, "Idle_HP_Mult": 0.3,
+                    "Idle_Speed_Mult": 0.5, "Idle_Reward_Mult": 1.4},
+        # Alt-Excel-Datensatz OHNE Grafik; ECHTE Bosse laufen ueber
+        # BOSS_DATA (Stufe 5/10/15), dieser Schluessel ist nur Reserve
+        "boss": {"Base_HP": 500, "Base_Speed": 15, "Base_Damage": 50,
+                 "Base_Reward": 150, "Min_Ship_Level": 1,
+                 "Spawn_Weight": 1, "HP_Add_Per_Stage": 200,
+                 "HP_Mult_Per_Stage": 1.15, "Speed_Add_Per_Stage": 0.5,
+                 "Damage_Add_Per_Stage": 10, "Idle_HP_Mult": 0.1,
+                 "Idle_Speed_Mult": 0.3, "Idle_Reward_Mult": 2.0},
+        # PVE88-TYPEN (steht 1:1 auch in game_data.xlsx):
+        # Insektenbrut - flotter Nahkaempfer, mittlere Huelle
+        "stalker": {"Base_HP": 48, "Base_Speed": 78, "Base_Damage": 9,
+                    "Base_Reward": 24, "Min_Ship_Level": 4,
+                    "Spawn_Weight": 15, "HP_Add_Per_Stage": 11,
+                    "HP_Mult_Per_Stage": 1.05, "Speed_Add_Per_Stage": 0.5,
+                    "Damage_Add_Per_Stage": 1.5, "Idle_Reward_Mult": 1.0},
+        # Qualle - langsam, tanky, treibt heran
+        "medusa": {"Base_HP": 110, "Base_Speed": 30, "Base_Damage": 11,
+                   "Base_Reward": 38, "Min_Ship_Level": 6,
+                   "Spawn_Weight": 11, "HP_Add_Per_Stage": 17,
+                   "HP_Mult_Per_Stage": 1.06, "Speed_Add_Per_Stage": 0.2,
+                   "Damage_Add_Per_Stage": 1.7, "Idle_Reward_Mult": 1.1},
+        # Cthulhu-Auge - spaeter Haertling, hoher Schaden
+        "eye": {"Base_HP": 150, "Base_Speed": 42, "Base_Damage": 17,
+                "Base_Reward": 52, "Min_Ship_Level": 10,
+                "Spawn_Weight": 8, "HP_Add_Per_Stage": 22,
+                "HP_Mult_Per_Stage": 1.06, "Speed_Add_Per_Stage": 0.3,
+                "Damage_Add_Per_Stage": 2.3, "Idle_Reward_Mult": 1.15},
+        # Kristallkluft - sehr tanky, sehr langsam (Endgame-Block)
+        "crystal": {"Base_HP": 260, "Base_Speed": 16, "Base_Damage": 13,
+                    "Base_Reward": 70, "Min_Ship_Level": 12,
+                    "Spawn_Weight": 6, "HP_Add_Per_Stage": 30,
+                    "HP_Mult_Per_Stage": 1.07, "Speed_Add_Per_Stage": 0.1,
+                    "Damage_Add_Per_Stage": 2.0, "Idle_Reward_Mult": 1.2},
+        # AB HIER GEPARKTE TYPEN (Grafik vorhanden, Min_Ship_Level 99 =
+        # ausserhalb jedes moeglichen Schiffslevels -> nie im Pool):
         # Kristall-Abfangjaeger (gruen, Asteroidenguertel-Palette)
         "shard": {"Base_HP": 30, "Base_Speed": 72, "Base_Damage": 6,
-                  "Base_Reward": 15, "Min_Ship_Level": 2,
+                  "Base_Reward": 15, "Min_Ship_Level": 99,
                   "Spawn_Weight": 28, "HP_Add_Per_Stage": 8,
                   "HP_Mult_Per_Stage": 1.05, "Speed_Add_Per_Stage": 0.5,
                   "Damage_Add_Per_Stage": 1.4, "Idle_Reward_Mult": 1.0},
         # Panzerkanonenboot (magenta-rot, Raumstation-Palette)
         "husk": {"Base_HP": 64, "Base_Speed": 36, "Base_Damage": 10,
-                 "Base_Reward": 26, "Min_Ship_Level": 4,
+                 "Base_Reward": 26, "Min_Ship_Level": 99,
                  "Spawn_Weight": 20, "HP_Add_Per_Stage": 14,
                  "HP_Mult_Per_Stage": 1.06, "Speed_Add_Per_Stage": 0.3,
                  "Damage_Add_Per_Stage": 1.8, "Idle_Reward_Mult": 1.05},
         # Tarnkopf-Dart (violett, Dunkler-Sektor-Palette)
         "wraith": {"Base_HP": 40, "Base_Speed": 95, "Base_Damage": 8,
-                   "Base_Reward": 32, "Min_Ship_Level": 6,
+                   "Base_Reward": 32, "Min_Ship_Level": 99,
                    "Spawn_Weight": 14, "HP_Add_Per_Stage": 9,
                    "HP_Mult_Per_Stage": 1.05, "Speed_Add_Per_Stage": 0.6,
                    "Damage_Add_Per_Stage": 1.6, "Idle_Reward_Mult": 1.1},
         # Bio-Traeger (biolumineszent gruen, Feindsignale-Palette)
         "hive": {"Base_HP": 130, "Base_Speed": 24, "Base_Damage": 13,
-                 "Base_Reward": 60, "Min_Ship_Level": 8,
+                 "Base_Reward": 60, "Min_Ship_Level": 99,
                  "Spawn_Weight": 8, "HP_Add_Per_Stage": 20,
                  "HP_Mult_Per_Stage": 1.07, "Speed_Add_Per_Stage": 0.2,
                  "Damage_Add_Per_Stage": 2.2, "Idle_Reward_Mult": 1.15},
-        # Boss-Flaggschiff der Stage 15 - wird ausschliesslich ueber den
-        # Boss-Zweig gespawnt; Min_Ship_Level 99 haelt ihn aus dem
-        # Zufalls-Pool heraus (Schiffslinien enden bei 12).
-        "lancer": {"Base_HP": 500, "Base_Speed": 20, "Base_Damage": 30,
-                   "Base_Reward": 500, "Min_Ship_Level": 99,
-                   "Spawn_Weight": 0, "HP_Add_Per_Stage": 0,
-                   "HP_Mult_Per_Stage": 1.0, "Speed_Add_Per_Stage": 0.0,
-                   "Damage_Add_Per_Stage": 0.0, "Idle_Reward_Mult": 1.0},
     }
 
 
 # PAKET 8.8: NEUE GEGNER AUS DEN ALTEN BOSS-GRAFIKEN DES NUTZERS.
 # Die Grafiken (enemys/enemy_<key>.png) liefert der Nutzer - sie waren
-# bisher nirgends registriert. Der update() greift in JEDEM Fall, auch
-# wenn game_data.xlsx existiert (Excel-Werte fuer die ALTEN Typen
-# bleiben unberuehrt - nur die neuen Schluessel kommen dazu).
+# bisher nirgends registriert. PUNKT-4-ABGLEICH: Diese 5 Typen stehen
+# jetzt 1:1 auch in game_data.xlsx (Sheet Enemies, inkl. carrier auf
+# diesem Stand statt der alten Alt-Excel-Zeile) - bei der abgeglichenen
+# Excel ist der update() unten eine No-Op (Werte identisch); er bleibt
+# als Schutz aktiv, falls eine AELTERE game_data.xlsx (ohne die Spalte
+# Min_Ship_Level oder ohne diese Zeilen) eingesetzt wird.
 PVE88_ROSTER = {
     # Insektenbrut - flotter Nahkaempfer, mittlere Huelle
     "stalker": {"Base_HP": 48, "Base_Speed": 78, "Base_Damage": 9,
@@ -196,12 +286,79 @@ BOSS_TYPE_CFG = {
                      "b_speed": 275.0, "size": 7, "heavy": True},
 }
 
+# AUFTRAG 19 (PUNKT 2): Eigenstaendige Boss-Belegung der SEKTOREN 6-8.
+# Sektor 1-5 bleiben bei BOSS_DATA (unveraendert). Fuer 6-8 wird dieselbe
+# Drei-Bosse-Struktur (Stufe 5/10/15) mit den VORHANDENEN drei Boss-Typen
+# (interceptor/brute/dragon, gleiche Grafiken und Feuer-Muster) in neuer
+# Reihenfolge und mit eigenen Namen/Werten gefuert - keine neuen Assets.
+# Die Basen sind bewusst KLEINER gewaehlt als bei Sektor 1, weil
+# boss_stats_for_stage mit CAMPAIGN_HP_MULT (6.25 in Sektor 8) und
+# hp_mult^Stufe (1.18^15) multipliziert - Simulationstest:
+# tools/simulate_boss.py (Sektor-Uebersicht) / tools/simulate_campaign.py.
+#   Sektor 6 "DER RISS":     St5 SPLITTERJAEGER / St10 RINGKREUZER /
+#                            St15 ABYSSDRACHE
+#   Sektor 7 "NEBELKERN":    St5 NEBELBOLLWERK / St10 NEBELDRACHE /
+#                            St15 SPLITTERKOENIG (schnelles Finale)
+#   Sektor 8 "KERNWELT":     St5 KERNBRUT / St10 SCHWARMHEROLD /
+#                            St15 KERNHERRSCHER (gepanzertes Finale)
+BOSS_SECTOR_DATA = {
+    6: {
+        5:  {"type": "interceptor", "name": "SPLITTERJÄGER",
+             "base_hp": 1150, "hp_mult": 1.18, "dr": 0.12, "speed": 34,
+             "damage": 26, "reward": 260, "col": (176, 120, 255)},
+        10: {"type": "brute", "name": "RINGKREUZER",
+             "base_hp": 750, "hp_mult": 1.18, "dr": 0.18, "speed": 26,
+             "damage": 30, "reward": 520, "col": (255, 80, 60)},
+        15: {"type": "dragon", "name": "ABYSSDRACHE",
+             "base_hp": 1100, "hp_mult": 1.18, "dr": 0.24, "speed": 30,
+             "damage": 30, "reward": 950, "col": (130, 225, 255)},
+    },
+    7: {
+        5:  {"type": "brute", "name": "NEBELBOLLWERK",
+             "base_hp": 900, "hp_mult": 1.18, "dr": 0.14, "speed": 26,
+             "damage": 28, "reward": 320, "col": (255, 80, 60)},
+        10: {"type": "dragon", "name": "NEBELDRACHE",
+             "base_hp": 650, "hp_mult": 1.18, "dr": 0.20, "speed": 30,
+             "damage": 32, "reward": 640, "col": (130, 225, 255)},
+        15: {"type": "interceptor", "name": "SPLITTERKÖNIG",
+             "base_hp": 950, "hp_mult": 1.18, "dr": 0.26, "speed": 34,
+             "damage": 34, "reward": 1200, "col": (176, 120, 255)},
+    },
+    8: {
+        5:  {"type": "dragon", "name": "KERNBRUT",
+             "base_hp": 800, "hp_mult": 1.18, "dr": 0.16, "speed": 30,
+             "damage": 30, "reward": 400, "col": (130, 225, 255)},
+        10: {"type": "interceptor", "name": "SCHWARMHEROLD",
+             "base_hp": 550, "hp_mult": 1.18, "dr": 0.22, "speed": 34,
+             "damage": 34, "reward": 800, "col": (176, 120, 255)},
+        15: {"type": "brute", "name": "KERNHERRSCHER",
+             "base_hp": 800, "hp_mult": 1.18, "dr": 0.30, "speed": 26,
+             "damage": 38, "reward": 1600, "col": (255, 80, 60)},
+    },
+}
+
+
+def boss_cfg_for(campaign_id, stage_id):
+    """EINE Quelle fuer die Boss-Belegung (AUFTRAG 19): Sektor 1-5 nutzt
+    die historische Tabelle BOSS_DATA (unveraendert), Sektor 6-8 ihre
+    eigene Tabelle BOSS_SECTOR_DATA. Nicht-Boss-Stufen -> None. Alle
+    Leser (pve_system, main, Simulatoren) rufen DIESE Funktion - nie
+    BOSS_DATA direkt."""
+    st = int(stage_id)
+    sec = BOSS_SECTOR_DATA.get(max(1, int(campaign_id)))
+    if sec and st in sec:
+        return sec[st]
+    return BOSS_DATA.get(st)
+
 # PAKET 8.8a: TREFFERRADIUS der Bosse. Die Bosse sind fuer die Praesenz
 # deutlich groesser gezeichnet (ENEMY_IMG_W in main.py: 150/195/235) -
 # die alte Starre-Zone von 30 waere nur noch ein Punkt in der Mitte.
 # Die Trefferzone waechst mit: groesseres Ziel, fairer Treffwechsel.
 # Normal-Gegner bleiben bei 30.
-BOSS_HIT_R = {"interceptor": 46, "brute": 54, "dragon": 60}
+# HOTFIX A2 (nachgezogen): Der Eisdrache wurde auf 300 Pixel Breite
+# vergroessert (ENEMY_IMG_W dragon 235 -> 300 in main.py). Damit die
+# Trefferzone mitwaechst, gilt der A2-Wert 75 (statt 60).
+BOSS_HIT_R = {"interceptor": 46, "brute": 54, "dragon": 75}
 
 # PAKET 8.8b: FLAMMENDER ATEM des EISDRACHEN. Der Drache benutzt KEINE
 # Kugel-Projektile mehr (Nutzerwunsch: "Ein Strahl waere richtig hammer.
@@ -306,7 +463,7 @@ def boss_stats_for_stage(stage_id, campaign_id=1):
     inkl. Kampagnen-Skalierung - die EINE Quelle fuer Spiel UND
     Simulatoren (kein Formel-Doppel mehr). liefert None, wenn die Stufe
     kein Bossgefecht ist."""
-    cfg = BOSS_DATA.get(int(stage_id)) if int(stage_id) in BOSS_DATA else None
+    cfg = boss_cfg_for(campaign_id, stage_id)
     if cfg is None:
         return None
     hp = float(cfg["base_hp"]) * (float(cfg["hp_mult"]) ** int(stage_id)) \
@@ -689,6 +846,49 @@ class PvECombat:
     @property
     def cannon_count(self): return min(8, self.cannon_count_level + int(self.mod("extra_cannons", 0)))   # NEU PAKET 4: MEHRFACHLAUF
 
+    # ------------------------------------------------------------------
+    # PUNKT 3 (AUFTRAG): EINE Berechnungsgrundlage fuer Spiel + Simulatoren.
+    # tools/simulate_boss / simulate_economy / simulate_campaign rufen
+    # nur noch total_dps() auf - die Formeln stehen GENAU HIER und nicht
+    # mehr kopiert in den Tools. Der echte Treffer-Pfad (Projektil-Schleife,
+    # Krit-Wurf unten bei ~Z.1317) hat denselben Erwartungswert wie
+    # expected_crit_mult(); salvo_damage() ist exakt die Summe der
+    # Projectile.damage-Werte, die eine Salve erzeugt (Krit erst auf Hit).
+    # ------------------------------------------------------------------
+    def expected_crit_mult(self, include_lyra=True):
+        """Erwartungswert-Multiplikator kritischer Treffer.
+        include_lyra=False: Basis ohne zeitweises Lyra-Ziel-Overlay."""
+        ch = self.mod("crit_chance", 0.0)
+        if include_lyra and self.crit_buff_t > 0.0:
+            ch += self.crit_buff_pct          # LYRA ZIEL-OVERLAY (AUFTRAG 8)
+        ch = max(0.0, min(1.0, ch))
+        return 1.0 + ch * (self.mod("crit_mult", 2.0) - 1.0)
+
+    def salvo_damage(self):
+        """Erwarteter Schaden EINER Salve: alle Kanonen auf ein Ziel."""
+        return self.cannon_count * self.cannon_damage * self.expected_crit_mult()
+
+    def cannon_dps(self):
+        return self.salvo_damage() / max(0.05, self.attack_rate)
+
+    def drone_dps(self):
+        """Hangar-Drohnen (PAKET 7C): Anzahl + Feuerraten wie update()."""
+        n = max(0, min(6, (self.hangar_level - 1)
+                       + int(self.mod("extra_drones", 0))))
+        if n <= 0:
+            return 0.0
+        drone_dmg = self.cannon_damage * float(PLAYER_DATA.get("drone_damage_mult", 0.5)) \
+            * (1.0 + self.mod("drone_dmg_pct", 0.0))
+        rate_mult = max(0.4, self.mod("drone_rate_mult", 1.0))
+        ivg = sum((1.15 + 0.18 * (i % 3)) for i in range(n)) / n * rate_mult
+        return n * drone_dmg / max(0.05, ivg)
+
+    def total_dps(self, boss_dr=0.0):
+        """Gesamt-DPS auf ein Ziel mit Panzerung boss_dr
+        (Kanonen + Drohnen, inkl. Boss-JAEGER-Bonus)."""
+        return (self.cannon_dps() + self.drone_dps()) \
+            * (1.0 - boss_dr) * (1.0 + self.mod("boss_dmg_pct", 0.0))
+
     def spawn_stage(self):
         self.enemies.clear()
         self.projectiles.clear()
@@ -709,7 +909,10 @@ class PvECombat:
 
     def _spawn_single_enemy(self):
         # PAKET 8.8: Boss-Logik ueber BOSS_DATA (Stufe 5/10/15)
-        boss_cfg = BOSS_DATA.get(self.stage_id) if not self.is_idle else None
+        # AUFTRAG 19: Boss-Belegung ueber die EINE Zuordnung (Sektor 1-5
+        # historische Tabelle, 6-8 eigene Tabellen - siehe boss_cfg_for).
+        boss_cfg = boss_cfg_for(self.campaign_id, self.stage_id) \
+            if not self.is_idle else None
         if boss_cfg:
             e_type = boss_cfg["type"]
             # AUFTRAG 16b: Boss-Werte ueber die EINE Quelle (inkl.
@@ -884,12 +1087,11 @@ class PvECombat:
                     e.breath_tick = BREATH_TICK_S
                     dps = BREATH_DPS * (BREATH_DPS_RAGE_MULT if e.enraged else 1.0) \
                         * self._boss_fx_dmg()   # AUFTRAG 16b: globale Koeffizienten
-                    applied = dps * BREATH_TICK_S * (1.0 - self.mod("dr_pct", 0.0))
-                    applied = max(1, int(applied))
-                    if self.is_idle:
-                        self.player_hp = max(1.0, self.player_hp - applied)
-                    else:
-                        self.player_hp = max(0.0, self.player_hp - applied)
+                    # PUNKT-4-AUFTRAG: Schadensrechnung (dr_pct, Idle-Schutz,
+                    # LETZTER WILLE) zentral - vorher ging der Atem am
+                    # Last-Stand-Skill vorbei.
+                    applied = self._apply_player_damage(
+                        dps * BREATH_TICK_S, cx, cy)
                     self._spawn_damage(cx + random.uniform(-34, 34), cy - 62,
                                        applied, (255, 140, 40))
                     # Impact am Schiff buchen (Damage-FX zeichnet Einschlag)
@@ -913,16 +1115,43 @@ class PvECombat:
                 e.boss_cd = random.uniform(lo, hi)
 
     # ---------------- PAKET 8.8c: GLUTBOMBEN & EISSPIESSE ----------------
-    def _ship_damage(self, amount, x, y):
-        """PAKET 8.8c: Schaden am Schiff buchen (AoE der Boss-Zusatz-
-        angriffe): Modul-Panzerung (dr_pct), Idle-Schutz (min 1 HP),
-        schwebende Schadenszahl, Impact-FX am Schiff."""
-        applied = amount * (1.0 - self.mod("dr_pct", 0.0))
+    def _apply_player_damage(self, raw_amount, x, y):
+        """PUNKT-4-AUFTRAG: EIN zentraler Schadenspfad am Schiff, den jetzt
+        ALLE Schadensquellen benutzen (Gegner-/Boss-Projektile, Drachen-
+        Atem, GLUTBOMBEN/EISSPIESSE). Reihenfolge wie im bisherigen
+        Projektil-Pfad (PAKET 8.8c):
+          1. Modul-Panzerung (dr_pct, ABFANG-FELD)
+          2. min 1 - auch ein durchgekommenes Beispiel trifft mindestens 1
+          3. Idle-Schutz: Huelle bleibt bei min. 1 HP (Idle verliert nie)
+          4. Gefecht: Huelle kann auf 0 fallen; LETZTER WILLE (PAKET 7B,
+             Skill last_stand) rettet EINMAL pro Gefecht mit 30 % max HP -
+             JETZT fuer alle Pfade, vorher nur fuer Projektile.
+        Die schwebenden Schadenszahlen/Impact-Events bleiben beim Aufrufer
+        (unterschiedliche Anzeige-Positionen/Farben). Liefert den
+        angewendeten Schaden zurueck."""
+        applied = raw_amount * (1.0 - self.mod("dr_pct", 0.0))
         applied = max(1, int(applied))
         if self.is_idle:
             self.player_hp = max(1.0, self.player_hp - applied)
         else:
             self.player_hp = max(0.0, self.player_hp - applied)
+            # NEU PAKET 7B / PUNKT-4: LETZTER WILLE - einmal pro Gefecht
+            # 30 % HP zurueck, jetzt in ALLEN Schadenspfaden.
+            if (self.player_hp <= 0 and self.mod("last_stand", 0) >= 1
+                    and not self._last_stand_used):
+                self._last_stand_used = True
+                self.player_hp = max(1.0, self.max_player_hp * 0.30)
+                self._spawn_damage(x, y - 80, "LETZTER WILLE!", (77, 255, 181), big=True)
+                SFX.play("upgrade", 0.6)
+        return applied
+
+    def _ship_damage(self, amount, x, y):
+        """PAKET 8.8c: Schaden am Schiff buchen (AoE der Boss-Zusatz-
+        angriffe): schwebende Schadenszahl, Impact-FX am Schiff. Die
+        Schadensrechnung (dr_pct, Idle-Schutz, LETZTER WILLE) laeuft
+        PUNKT-4-AUFTRAG zentral ueber _apply_player_damage - der LETZTE
+        WILLE greift damit auch bei Bomben/Spiessen."""
+        applied = self._apply_player_damage(amount, x, y)
         self._spawn_damage(x, y - 15, applied, (255, 77, 100))
         self.hit_events.append((float(x), float(y), float(applied)))
         if len(self.hit_events) > 32:
@@ -1366,19 +1595,10 @@ class PvECombat:
             
             elif p.kind == "enemy":
                 if math.hypot(cx - p.x, cy - p.y) < 80:
-                    applied = p.damage * (1.0 - self.mod("dr_pct", 0.0))   # NEU PAKET 4: ABFANG-FELD
-                    applied = max(1, int(applied))
-                    if self.is_idle:
-                        self.player_hp = max(1.0, self.player_hp - applied)
-                    else:
-                        self.player_hp = max(0.0, self.player_hp - applied)
-                        # NEU PAKET 7B: LETZTER WILLE - einmal pro Gefecht 30% HP zurueck
-                        if (self.player_hp <= 0 and self.mod("last_stand", 0) >= 1
-                                and not self._last_stand_used):
-                            self._last_stand_used = True
-                            self.player_hp = max(1.0, self.max_player_hp * 0.30)
-                            self._spawn_damage(cx, cy - 80, "LETZTER WILLE!", (77, 255, 181), big=True)
-                            SFX.play("upgrade", 0.6)
+                    # PUNKT-4-AUFTRAG: Schadensrechnung (ABFANG-FELD dr_pct,
+                    # Idle-Schutz, LETZTER WILLE) zentral - Verhalten
+                    # identisch zum bisherigen Projektil-Pfad (PAKET 7B).
+                    applied = self._apply_player_damage(p.damage, cx, cy)
                     self._spawn_damage(p.x, p.y - 15, applied, (255, 77, 100))   # NEU PAKET 4: Schadenszahl (Spieler)
                     # PAKET 8.3: Einschlag fuer die Damage-FX am Schiff buchen
                     self.hit_events.append((float(p.x), float(p.y), float(applied)))

@@ -314,8 +314,9 @@ def module_effect_values(key, lvl):
     """Aktuelle Werte eines Moduls (fuer das Werft-Panel)."""
     lvl = max(1, int(lvl))
     if key == "kanonen":
+        # PUNKT 3: Deckel 8 wie cannon_count in pve_system (Salvo-Zahl)
         return [f"Schaden: +{12 * (lvl - 1)}%",
-                f"Projektile/Salve: {1 + lvl // 2}"]
+                f"Projektile/Salve: {min(8, 1 + lvl // 2)}"]
     if key == "schild":
         # PAKET 7C: Schildsystem = Schadensreduktion (Huelle jetzt in "huelle")
         return [f"Schadensreduktion: {3 * (lvl - 1)}%",

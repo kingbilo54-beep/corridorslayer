@@ -91,6 +91,14 @@ PROFILES_SECTORS = {
                         "reaktor": 6, "hangar": 6, "radar": 5, "reparatur": 5}, 5, 18),
     5: ("Schiff 11-12", {"kanonen": 13, "antrieb": 9, "huelle": 8, "schild": 7,
                          "reaktor": 7, "hangar": 7, "radar": 6, "reparatur": 6}, 6, 22),
+    # AUFTRAG 19 (PUNKT 2): Referenz-Profile der Sektoren 6-8 (Endstufen-
+    # Ausruestung, siehe simulate_campaign.PROFILES "Schiff 12 - Endstufe").
+    6: ("Schiff 12 - Endstufe", {"kanonen": 14, "antrieb": 9, "huelle": 9, "schild": 7,
+                                 "reaktor": 7, "hangar": 7, "radar": 6, "reparatur": 6}, 6, 24),
+    7: ("Schiff 12 - Endstufe", {"kanonen": 15, "antrieb": 10, "huelle": 9, "schild": 8,
+                                 "reaktor": 8, "hangar": 8, "radar": 7, "reparatur": 7}, 7, 26),
+    8: ("Schiff 12 - Endstufe", {"kanonen": 15, "antrieb": 10, "huelle": 9, "schild": 8,
+                                 "reaktor": 8, "hangar": 8, "radar": 7, "reparatur": 7}, 7, 30),
 }
 
 SHIP_DODGE_AMP = 70.0     # px vertikale Auslenkung (Touch-Drag)
@@ -126,16 +134,13 @@ def build_player(mod_levels, hull_lvl, skill_points, stage, campaign=1):
 
 
 def dps_of(combat, boss_dr=0.0):
-    """Gesamt-DPS auf ein Ziel mit Panzerung boss_dr (Kanonen + Drohnen)."""
-    e_crit = 1.0 + combat.mod("crit_chance", 0.0) * (combat.mod("crit_mult", 2.0) - 1.0)
-    dps = combat.cannon_count * combat.cannon_damage * e_crit / max(0.05, combat.attack_rate)
-    n = max(0, min(6, (combat.hangar_level - 1) + int(combat.mod("extra_drones", 0))))
-    if n > 0:
-        drone_dmg = combat.cannon_damage * 0.5 * (1.0 + combat.mod("drone_dmg_pct", 0.0))
-        rate_mult = max(0.4, combat.mod("drone_rate_mult", 1.0))
-        ivg = sum((1.15 + 0.18 * (i % 3)) for i in range(n)) / n * rate_mult
-        dps += n * drone_dmg / max(0.05, ivg)
-    return dps * (1.0 - boss_dr) * (1.0 + combat.mod("boss_dmg_pct", 0.0))
+    """Gesamt-DPS auf ein Ziel mit Panzerung boss_dr (Kanonen + Drohnen).
+    PUNKT 3 (AUFTRAG): delegiert an die EINE Berechnungsgrundlage in
+    pve_system (PvECombat.total_dps) - die Formel steht nicht mehr als
+    Kopie hier. Ergebnis identisch zum bisherigen Stand (gleicher
+    Erwartungswert), plus Lyra-Crit-Buff und xlsx-Drohnenfaktor exakt
+    wie im Spiel."""
+    return combat.total_dps(boss_dr)
 
 
 def simulate_fight(combat, stage, campaign=1, trials=300):
@@ -146,7 +151,9 @@ def simulate_fight(combat, stage, campaign=1, trials=300):
     if stats is None:
         raise ValueError(f"Stufe {stage} ist kein Boss (Kampagne {campaign})")
     hp0, dmg_mean, _reward = stats
-    boss = pve.BOSS_DATA[stage]
+    # AUFTRAG 19: Boss-Cfg ueber die EINE Zuordnung (Sektor 6-8 haben
+    # eigene Boss-Tabellen - BOSS_SECTOR_DATA, siehe pve_system).
+    boss = pve.boss_cfg_for(campaign, stage)
     cfg = pve.BOSS_TYPE_CFG[boss["type"]]
     boss_hp_eff = hp0 / (1.0 - boss["dr"])
     dps = dps_of(combat, boss["dr"])
@@ -253,7 +260,7 @@ def main():
     print("#" * 96)
     for stage in (5, 10, 15):
         hp0, dmg_mean, reward = pve.boss_stats_for_stage(stage, 1)
-        boss = pve.BOSS_DATA[stage]
+        boss = pve.boss_cfg_for(1, stage)
         print("")
         print("=" * 96)
         print(f"STUFE {stage}: {boss['name']} ({boss['type']})  "
@@ -273,7 +280,7 @@ def main():
     print("#" * 96)
     print("# SEKTOR-UEBERSICHT (Stufe-15-Boss je Sektor, Referenz-Profile)")
     print("#" * 96)
-    for camp in (2, 3, 4, 5):
+    for camp in range(2, rcfg.CAMPAIGN_COUNT + 1):
         hp0, dmg_mean, reward = pve.boss_stats_for_stage(15, camp)
         name, lvls, hull, sk = PROFILES_SECTORS[camp]
         combat = build_player(lvls, hull, sk, 15, campaign=camp)
