@@ -60,11 +60,21 @@ SKILL_COST_MULT = 2.5
 # PAKET 8.7: PREISBREMSE STUFE 2 (Nutzer-Feedback: "Upgrades gehen zu
 # schnell, Preise sind immer noch zu low - Einkommen kann so bleiben").
 # Alle Modul- und Schiffspreise werden mit diesem Faktor multipliziert,
-# das EINKOMMEN (Kills, Quests, Idle) bleibt unveraendert. Gegenueber dem
-# Original (1.0) sind Preise damit x5.6, gegenueber Paket 8.4 (2.8)
-# verdoppelt: Eine Waffe auf Level 7 kostet kumuliert rund einen
-# Mehr-Tage-Etat aus Kampagne + Dailies statt einer Session.
-BAL_COST_MULT = 5.6
+# das EINKOMMEN (Kills, Quests, Idle) bleibt unveraendert.
+# PAKET 9.1: KAUFPREISE +25% (Auftrag "Visuals & Economy"). 5.6 -> 7.0:
+# Saemtliche Modul-Upgrades und die Schiffs-Rumpf-Kurve verteuern sich
+# exakt um x1.25. Einnahmen/Belohnungen/Drops/Idle-Ertraege bleiben
+# UNVERAENDERT (BAL_CREDITS/BAL_IDLE_CREDITS und Beute-Tabellen unberuehrt).
+BAL_COST_MULT = 7.0
+
+# PAKET 9.1: SKILL-KAUFPEISE +25% (Data Cores). Die Node-Kosten werden in
+# skill_tree.py zusaetzlich zu SKILL_COST_MULT mit diesen Faktoren
+# multipliziert: Standard x1.25, BESONDERS STARKE Nodes (MEHRFACHLAUF,
+# DURCHSCHLAG, ABFANG-FELD, LETZER WILLE, HANGAR-TAKTIK, SYSTEM-SYNERGIE,
+# EXEKUTOR, SPRENGSPITZE, UEBERTAKTUNG) x1.40. Nur Preise - Effekte
+# bleiben unveraendert.
+SKILL_PRICE_MULT = 1.25
+SKILL_PRICE_STRONG_MULT = 1.40
 
 # ----------------------------------------------------------------------
 # AUFTRAG 16b: KAMPAGNEN-SKALIERUNG (Sektoren 1-5)
@@ -225,8 +235,10 @@ WEEKLY_BONUS = {"xp": 5000, "credits": 2500, "quantum": 40, "cores": 2}
 # ----------------------------------------------------------------------
 # BESCHWOERUNG
 # ----------------------------------------------------------------------
-SUMMON_COST_SINGLE = 3            # Data Cores pro Einzelbeschoerung
-SUMMON_COST_MULTI = 27            # 10x-Beschoerung (10 % Rabatt)
+# PAKET 9.1: KAUFPREISE +25%: 3 -> 4 bzw. 27 -> 34 (Preise der Ziehungen;
+# Zieh-Raten und Duplikat-Credits bleiben unveraendert).
+SUMMON_COST_SINGLE = 4            # Data Cores pro Einzelbeschoerung
+SUMMON_COST_MULTI = 34            # 10x-Beschoerung (Rabatt ~15 %)
 SUMMON_MULTI_COUNT = 10
 
 # Offizielle Zieh-Wahrscheinlichkeiten (in der UI transparent angezeigt)

@@ -54,6 +54,13 @@ def _folder(name, old_abs):
 ENEMY_FOLDER = _folder("enemys",
                        r"C:\Users\bsahi\Desktop\corridorSlayers\DS4\enemys")
 
+# AUFTRAG DRACHEN-HURT: Dauer der Verletz-Animation (Sekunden). Wird bei
+# JEDEM Schaden auf e.hurt_t gesetzt und dort pro Frame runtergezaehlt;
+# main.py spielt in der Zeit die "hurt"-Frame-Sequenz einmal durch
+# (Sheet in enemys/enemy_<typ>/hurt/ oder enemys/enemy_<typ>_hurt.png).
+# 0.72 s = snappy Flinzer bei typischen 8-Frame-Sheets (~11 fps effektiv).
+HURT_T_S = 0.72
+
 # PAKET 8.2 + PUNKT-4-ABGLEICH: Eingebauter Gegner-Roster als Fallback,
 # falls game_data.xlsx fehlt (Distribution ohne Excel). Seit dem Abgleich
 # ist er 1:1 deckungsgleich mit dem Sheet "Enemies" der game_data.xlsx -
@@ -427,7 +434,28 @@ def boss_cfg_for(campaign_id, stage_id):
 # HOTFIX A2 (nachgezogen): Der Eisdrache wurde auf 300 Pixel Breite
 # vergroessert (ENEMY_IMG_W dragon 235 -> 300 in main.py). Damit die
 # Trefferzone mitwaechst, gilt der A2-Wert 75 (statt 60).
-BOSS_HIT_R = {"interceptor": 46, "brute": 54, "dragon": 75}
+# AUFTRAG DRACHE-GROSS: Eisdrache 300 -> 460 in main.py (neue Idle-
+# Animation aus enemys/enemy_dragon/idle/). Trefferzone waechst
+# proportional mit: 75 -> 110 (gleiches Verhaeltnis zur Breite).
+BOSS_HIT_R = {"interceptor": 46, "brute": 54, "dragon": 110}
+
+# AUFTRAG RANGE-FIX (Nutzer: "die Range der Gegner sollte erhoeht
+# werden", "der Drache kommt nicht einmal zum angreifen", "der Strahl
+# muss bis zum Schiff reichen"):
+#   ENEMY_ATTACK_RANGE : ab welcher Distanz (Schiffmitte -> Gegner)
+#     UEBERHAUPT angegriffen wird - EINHEITLICH fuer Normalgegner UND
+#     Bosse (vorher 550). 720 = Gegner feuern schon im Anflug, bevor
+#     sie ihre Halteposition erreicht haben. Bosse sind langsam
+#     (Speed 26-34) und starben vorher oft, bevor sie je schossen.
+#   BREATH_START_RANGE : interne Zusatz-Schwelle des Atem-Starts
+#     (vorher 560 - war wirkungslos, weil der aeussere Gate kleiner
+#     war). Liegt jetzt bewusst ueber ENEMY_ATTACK_RANGE.
+#   BREATH_RANGE       : 640 -> 720. Der Strahl reicht damit vom Maul
+#     IMMER bis zum Schiff: selbst am aeussersten Rand der Angriffs-
+#     range sitzt das Maul ~200 px naeher am Schiff als die Drachen-
+#     Mitte (Maul->Schiff ~470-520 < 720).
+ENEMY_ATTACK_RANGE = 720.0
+BREATH_START_RANGE = 760.0
 
 # PAKET 8.8b: FLAMMENDER ATEM des EISDRACHEN. Der Drache benutzt KEINE
 # Kugel-Projektile mehr (Nutzerwunsch: "Ein Strahl waere richtig hammer.
@@ -439,7 +467,8 @@ BOSS_HIT_R = {"interceptor": 46, "brute": 54, "dragon": 75}
 BREATH_TELEGRAPH_S = 0.62   # Mund glimmt, Ziel folgt dem Schiff
 BREATH_ACTIVE_S = 0.95      # Strahl brennt (normal)
 BREATH_ACTIVE_RAGE_S = 1.25 # Strahl brennt laenger in der Wut-Phase
-BREATH_RANGE = 640.0        # Reichweite in Welt-px
+BREATH_RANGE = 720.0        # Reichweite in Welt-px (RANGE-FIX 640 -> 720:
+                            # Strahl erreicht das Schiff immer)
 BREATH_HALF_ANGLE = 0.32    # Kegel-Halbwinkel in rad (~18 Grad)
 BREATH_DPS = 46.0           # Schaden pro Sekunde im Strahl
 BREATH_DPS_RAGE_MULT = 1.3  # ... in der Wut-Phase
@@ -452,8 +481,20 @@ BREATH_CD_RAGE = (1.7, 2.3) # ... in der Wut-Phase
 # Der Boss sollte eine Bandbreite an verschiedenen Angriffen haben,
 # zumindest 2 weitere. der Boss sollte auch etwas mehr nach oben und
 # unten sich bewegen."
-#   BOSS_HOLD_X : Bosse stoppen WEITER DRAUSSEN als Normalgegner (400) -
-#                 die Schnauze bleibt klar vom Schiff weg, auch am Ende.
+#   BOSS_HOLD_X : AUFTRAG BOSS-ABSTAND (Nutzer: "Der Boss kommt auch
+#                 VIEL ZU NAHE, der bedeckt sogar ein Teil vom Schiff"):
+#                 DRACHE 445 -> 640. Die neuen Drachen-Sprites sind
+#                 breit (Idle 460 px, Attack-Frame 567 px, zentriert
+#                 gezeichnet) - bei 445 reichte der Attack-Frame bis
+#                 x=161 und lag AUF dem Schiff (Festung ~40..200).
+#                 Bei 640 spannt der Drache 357..923: klarer Abstand,
+#                 kein Ueberlapp mehr. Der Drache greift ab
+#                 BREATH_START_RANGE 760 schon im Anflug an und ist
+#                 trotzdem nie schutzlos, bevor er zuschlaegt.
+#                 Targeting: seit BOSS-FEUERFERNHE zielbar ab
+#                 BOSS_TARGET_X 780 (_in_player_range unten).
+#                 interceptor/brute: 440/445 (schmale Sprites 150/195
+#                 px, kein Ueberlapp - kein Grund zu aendern).
 #   BOSS_MOVE_* : echte Auf/Ab-Bewegung (vorher nur 4 px Zeichnungs-Bob):
 #                 zwei ueberlagerte, langsame Sinuswellen wirken majestaetisch
 #                 und lassen den Atem manchmal am Schiff vorbei ziehen.
@@ -461,12 +502,36 @@ BREATH_CD_RAGE = (1.7, 2.3) # ... in der Wut-Phase
 #                 (EISDRACHE + SCHLACHTSCHIFF).
 #   SPIKE_*     : EISSPIESSE - telegrafierte Eruptionen aus dem Untergrund
 #                 (EISDRACHE + TARNJAEGER).
-BOSS_HOLD_X = {"interceptor": 520.0, "brute": 545.0, "dragon": 560.0}
+BOSS_HOLD_X = {"interceptor": 440.0, "brute": 445.0, "dragon": 640.0}
 BOSS_MOVE_AMP = 55.0         # Haupt-Amplitude (px)
 BOSS_MOVE_AMP2 = 18.0        # Neben-Amplitude (Unregelmaessigkeit)
 BOSS_MOVE_SPD = 0.42         # rad/s -> ~15 s pro Haupt-Schwingung
 BOSS_MOVE_SPD2 = 0.83        # zweite Welle
 BOSS_Y_MIN, BOSS_Y_MAX = 150.0, 390.0
+
+# AUFTRAG BOSS-FEUERFERNHE (Nutzer: "der Boss wird immernoch aus zu
+# grosser Entfernung angegriffen, dass einmal fixen"): Bosse spawnen
+# bei x=1000 und waren bisher via is_boss-Ausnahme AB SPAWN zielbar -
+# Kanonen/Drohnen haben sie also ueber den halben Bildschirm hinweg
+# unter Beschuss genommen, noch BEVOR der Kampf ueberhaupt begann.
+# Zwei Stellschrauben:
+#   BOSS_TARGET_X       : Spieler-Feuer (Kanonen, Drohnen, Vergeltungs-
+#                 Pulse) zielt Bosse erst, WENN SIE DIESE LINIE
+#                 PASSIEREN (780). Der Drache haelt bei 640, Inter-
+#                 ceptor/Brute bei 440/445 - alle sind also IMMER
+#                 zielbar, sobald der Kampf wirklich laeuft. Eigene
+#                 Boss-Angriffe starten frueher (ENEMY_ATTACK_RANGE
+#                 720 -> x < 840): der Boss schlaegt im Anflug zuerst
+#                 zu, das Schiff antwortet, sobald er wirklich "da"
+#                 ist. EINE Regel fuer alles: _in_player_range().
+#   BOSS_APPROACH_BOOST : Anflug-Tempo AUSSERHALB der Zielrange (x >
+#                 BOSS_TARGET_X). Ohne Boost waere die Schonfrist eine
+#                 8-9 s WARTESCHLEIFE (Drache: 1000 -> 780 bei Speed
+#                 26). Mit 2.4x rast der Boss dramatisch heran und
+#                 schaltet ab der Zielrange aufs gleitende Kampf-
+#                 tempo zurueck.
+BOSS_TARGET_X = 780.0
+BOSS_APPROACH_BOOST = 2.4
 
 BOMB_TELEGRAPH_S = 0.55      # Mund gloht, Zielmarken pulsieren (s)
 BOMB_COUNT = 3               # +2 in der Wut-Phase
@@ -590,6 +655,12 @@ class Enemy:
     y: float = 0.0
     attack_cooldown: float = 2.0
     hit_flash: float = 0.0
+    # AUFTRAG DRACHEN-HURT: Restzeit der Verletz-Animation. pve setzt
+    # sie bei JEDEM Schadens-Treffer; die Zeichnung (main.py) spielt
+    # solange die "hurt"-Frame-Sequenz des Typs einmal durch (Sheet in
+    # enemys/enemy_<typ>/hurt/ oder enemys/enemy_<typ>_hurt.png).
+    # 0.72 s passt zu ~8-Frame-Sheets bei snappy ~11 fps Effektiv-Tempo.
+    hurt_t: float = 0.0
     # PAKET 8.8: Boss-Felder (nur bei Bossen gesetzt)
     is_boss: bool = False
     dr: float = 0.0            # Panzerung: 0..0.5 Schadensreduktion
@@ -861,6 +932,7 @@ class PvECombat:
             dmg = max(1, int(dmg))
             ziel.hp -= dmg
             ziel.hit_flash = 0.15
+            ziel.hurt_t = HURT_T_S      # DRACHEN-HURT: Schaden sichtbar machen
             self._spawn_damage(ziel.x, ziel.y - 34, dmg, (255, 190, 76), big=True)
             for _a in range(16):                 # Einschlags-Partikel
                 self.particles.append(Particle(
@@ -985,6 +1057,19 @@ class PvECombat:
             self.spawn_queue = 999 if self.is_idle else stage_enemy_count(self.stage_id)
             
         self.spawn_timer = 2.0
+
+    def _in_player_range(self, e):
+        """AUFTRAG BOSS-FEUERFERNHE: EINE Zielrange-Regel fuer ALLES
+        Spieler-Feuer (Kanonen-Salven, Drohnen, Vergeltungs-Pulse).
+        Normalgegner: ab x < 450 zielbar (wie gehabt). Bosse: erst ab
+        BOSS_TARGET_X (780) - sie spawnen bei x=1000 und wurden vorher
+        ueber den halben Bildschirm hinweg beschossen, noch bevor der
+        Kampf begonnen hat. Eigene Boss-Angriffe starten frueher
+        (ENEMY_ATTACK_RANGE 720 -> x < 840): der Boss schlaegt zuerst
+        zu, das Schiff antwortet, sobald er wirklich 'da' ist."""
+        if e.is_boss:
+            return e.x < BOSS_TARGET_X
+        return e.x < 450.0
 
     def _spawn_single_enemy(self):
         # PAKET 8.8: Boss-Logik ueber BOSS_DATA (Stufe 5/10/15)
@@ -1151,7 +1236,7 @@ class PvECombat:
 
         if e.breath_phase == 0 and e.atk_kind == 0:
             e.boss_cd -= dt
-            if e.boss_cd <= 0 and dist_to_ship < 560.0:
+            if e.boss_cd <= 0 and dist_to_ship < BREATH_START_RANGE:
                 e.breath_phase = 1                      # Telegraf startet
                 e.breath_t = BREATH_TELEGRAPH_S
                 e.breath_ang = math.atan2(cy - e.y, cx - e.x)
@@ -1181,22 +1266,25 @@ class PvECombat:
                     # Last-Stand-Skill vorbei.
                     applied = self._apply_player_damage(
                         dps * BREATH_TICK_S, cx, cy)
+                    # EIS-Strahl -> Eis-blaue Schadenszahlen (vorher orange)
                     self._spawn_damage(cx + random.uniform(-34, 34), cy - 62,
-                                       applied, (255, 140, 40))
+                                       applied, (140, 215, 255))
                     # Impact am Schiff buchen (Damage-FX zeichnet Einschlag)
                     self.hit_events.append((float(cx), float(cy - 20), float(applied)))
                     if len(self.hit_events) > 32:
                         del self.hit_events[:-16]
                     if not self.is_idle:
                         SFX.play("hit", 0.3)
-            # Glut-Partikel entlang des Strahls (welt-Koordinaten)
+            # EIS-Partikel entlang des Strahls (Welt-Koordinaten).
+            # AUFTRAG STRAHL-FIX: vorher glut-orange Funken (255,x,30)
+            # in einem EIS-Strahl - jetzt Eisglitzer in den PNG-Farben.
             for _ in range(2):
                 tt = random.uniform(0.12, 1.0)
                 px = e.x + math.cos(e.breath_ang) * BREATH_RANGE * tt
                 py = e.y + math.sin(e.breath_ang) * BREATH_RANGE * tt
                 self.particles.append(Particle(
                     px, py, random.uniform(-30, 30), random.uniform(-70, -10),
-                    (255, random.randint(120, 190), 30),
+                    (random.randint(170, 220), random.randint(228, 248), 255),
                     random.uniform(2.5, 6.0), 0.45, 0.45))
             if e.breath_t <= 0:
                 e.breath_phase = 0
@@ -1493,7 +1581,13 @@ class PvECombat:
             self.retaliate_tick -= dt
             if self.retaliate_tick <= 0 and self.enemies:
                 self.retaliate_tick = 0.5
-                for tgt in sorted(self.enemies, key=lambda en: en.x)[:2]:
+                # BOSS-FEUERFERNHE: auch der Vergeltungs-Puls respektiert
+                # die Zielrange (_in_player_range) - kein Beschuss aus
+                # dem Nichts auf einen Boss am rechten Bildschirmrand.
+                _ret = sorted((t for t in self.enemies
+                               if self._in_player_range(t)),
+                              key=lambda en: en.x)[:2]
+                for tgt in _ret:
                     dx, dy = tgt.x - cx, tgt.y - cy
                     dist = math.hypot(dx, dy) or 1
                     self.projectiles.append(Projectile(
@@ -1514,14 +1608,22 @@ class PvECombat:
 
         for e in list(self.enemies):
             e.hit_flash = max(0.0, e.hit_flash - dt)
+            # AUFTRAG DRACHEN-HURT: Verletz-Animation runterzaehlen
+            e.hurt_t = max(0.0, e.hurt_t - dt)
 
             if e.is_boss:
-                # PAKET 8.8c: Bosse halten ABSTAND (Nutzer: "Der Boss kommt
-                # jedoch viel zu nahe zum Schluss") - sie stoppen weiter
-                # draussen als Normalgegner (400), die Schnauze bleibt weg.
+                # RANGE-FIX: Bosse halten bei 440-445 - etwas weiter
+                # draussen als Normalgegner (400), aber INNERHALB der
+                # Zielrange 450, damit Schiff/Drohnen sie wie jeden
+                # anderen Gegner behandeln (keine Bonus-Reichweite mehr).
                 stop_x = BOSS_HOLD_X.get(e.enemy_type, 400.0)
                 if e.x > stop_x:
-                    e.x -= e.speed * dt
+                    # BOSS-FEUERFERNHE: ausserhalb der Zielrange (x >
+                    # BOSS_TARGET_X) rast der Anflug mit 2.4x - die
+                    # Schonfrist wird nicht zur Warteschleife. Ab der
+                    # Zielrange gleitet der Boss im normalen Kampftempo.
+                    cruise = BOSS_APPROACH_BOOST if e.x > BOSS_TARGET_X else 1.0
+                    e.x -= e.speed * cruise * dt
                 else:
                     e.x = stop_x
                 # PAKET 8.8c: echte Auf/Ab-Bewegung (vorher nur 4 px
@@ -1578,7 +1680,11 @@ class PvECombat:
                         * bh["sway_amp"] * dt
 
             dist_to_ship = math.hypot(cx - e.x, cy - e.y)
-            if dist_to_ship < 550: 
+            # RANGE-FIX: 550 -> ENEMY_ATTACK_RANGE (720). Gegner und
+            # Bosse greifen jetzt schon im Anflug an - vorher starben
+            # langsame Bosse (Speed 26-34) oft, bevor sie je in
+            # Reichweite kamen ("der Drache kommt nicht zum angreifen").
+            if dist_to_ship < ENEMY_ATTACK_RANGE: 
                 # PAKET 8.8: Bosse feuern Faecher-Salven (_boss_shoot),
                 # Normalgegner wie gehabt einen gezielten Schuss.
                 # PAKET 8.8b: Der EISDRACHE hat den FLAMMEN-ATEM statt
@@ -1622,10 +1728,20 @@ class PvECombat:
                                            size=p_size, speed=p_speed,
                                            kind="enemy"))
 
-        # PAKET 8.8c: Bosse halten weiter Abstand (520-560), bleiben aber
-        # ZIELBAR - sonst wuerden Kanonen/Drohnen den Boss nie beachten.
+        # AUFTRAG BOSS-ABSTAND: Der Drache haelt bei 640 (BOSS_HOLD_X)
+        # - ausserhalb der Normal-Zielrange 450, aber ohne Ueberlapp
+        # mit dem Schiff (Festung ~40..200).
+        # AUFTRAG BOSS-FEUERFERNHE (Nutzer: "der Boss wird immernoch
+        # aus zu grosser Entfernung angegriffen"): Bosse sind NICHT
+        # MEHR ab Spawn (x=1000) zielbar. Alles Spieler-Feuer (Kanonen,
+        # Drohnen, Vergeltungspulse) greift erst ab BOSS_TARGET_X 780
+        # - EINE Regel in _in_player_range(). Der Boss schlaegt im
+        # Anflug trotzdem zuerst zu (Atem ab x < 840) und rast mit
+        # 2.4x heran, bis er zielbar ist - die alte "Boss stirbt im
+        # Anflug, ohne je anzugreifen"-Falle bleibt geschlossen.
+        # Normalgegner bleiben bei x < 450.
         visible_enemies = [e for e in self.enemies
-                           if e.x < 450 or e.is_boss]
+                           if self._in_player_range(e)]
         if visible_enemies and cannon_positions:
             target = min(visible_enemies, key=lambda e: e.x)
             self.auto_fire_timer -= dt
@@ -1719,6 +1835,7 @@ class PvECombat:
                         dmg = max(1, int(dmg))
                         e.hp -= dmg
                         e.hit_flash = 0.15
+                        e.hurt_t = HURT_T_S   # DRACHEN-HURT: Schaden sichtbar
                         # AUFTRAG 21: Treffer-Glitzer in der Typ-Farbe
                         _fx = ENEMY_FX_COL.get(e.enemy_type, (0, 255, 255))
                         self.particles.append(Particle(
@@ -1749,6 +1866,7 @@ class PvECombat:
                                         continue
                                     if math.hypot(o.x - e.x, o.y - e.y) < 90:
                                         o.hp -= self.cannon_damage * 0.3
+                                        o.hurt_t = HURT_T_S   # DRACHEN-HURT
                                         self._spawn_damage(o.x, o.y - 30, int(self.cannon_damage * 0.3), (255, 190, 76))
                                         if o.hp <= 0 and o in self.enemies:
                                             # SCHRITT 1a: Kettenabschuss bekommt

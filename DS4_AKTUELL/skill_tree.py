@@ -19,7 +19,7 @@ import json
 from pathlib import Path
 # SCHRITT 3: Globale Skill-Kostenbremse liegt zentral im BALANCE-Block
 # von rpg_config.py und wird nur noch importiert (Wert identisch).
-from rpg_config import SKILL_COST_MULT
+from rpg_config import SKILL_COST_MULT, SKILL_PRICE_MULT, SKILL_PRICE_STRONG_MULT
 
 SAVE_PATH = Path(__file__).with_name("corridor_slayer_skills.json")
 
@@ -165,6 +165,26 @@ for _b in SKILL_TREE:
         _n["costs"] = [int(round(int(c) * SKILL_COST_MULT)) if _i < 3
                        else int(round(int(c) * 1.5 * SKILL_COST_MULT))
                        for _i, c in enumerate(_n["costs"])]
+
+# PAKET 9.1: KAUFPREISE +25% (Auftrag "Visuals & Economy"). NUR Preise:
+# Effekte/Mods bleiben unveraendert. Standard x1.25; besonders starke
+# Nodes x1.40 (Liste unten - identisch mit Kommentar in rpg_config.py).
+SKILL_STRONG_NODES = {
+    "waffen_salve",     # MEHRFACHLAUF: +1 Projektil/Salve
+    "off_durchschlag",  # DURCHSCHLAG: Panzer durchdringend
+    "vert_schild",      # ABFANG-FELD: Flat-Schadensreduktion
+    "vert_wille",       # LETZER WILLE: 1x Ueberleben je Gefecht
+    "ener_taktik",      # HANGAR-TAKTIK: +1 Drohne
+    "tec_synergie",     # SYSTEM-SYNERGIE: verstaerkt ALLE Modul-Boni
+    "spez_exekutor",    # EXEKUTOR: Hinrichtung < 20% HP
+    "spez_spreng",      # SPRENGSPITZE: Kills explodieren
+    "spez_overdrive",   # UEBERTAKTUNG: aktive Faehigkeit (Taste Q)
+}
+for _b in SKILL_TREE:
+    for _n in _b["nodes"]:
+        _f = SKILL_PRICE_STRONG_MULT if _n["id"] in SKILL_STRONG_NODES \
+            else SKILL_PRICE_MULT
+        _n["costs"] = [int(round(int(c) * _f)) for c in _n["costs"]]
 
 
 class SkillTree:

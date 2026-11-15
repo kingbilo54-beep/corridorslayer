@@ -1,0 +1,96 @@
+CORRIDOR SLAYER - PAKET: ATTACK2 (2. DRACHEN-ANGRIFF) + GLEICHE GROESSE
+=======================================================================
+
+INHALT (in den Spielordner DS4_AKTUELL kopieren, vorher Backup ziehen):
+  main.py                     attack2-Einbau + Groessen-Normalisierung
+  tools\sprite_splitter.py    Tool: Filter jetzt IDENTISCH zum Spiel-Loader;
+                              ohne Argument werden ALLE Drachen-Zustaende
+                              zerlegt
+
+Basis: das Paket "GANZE KARTEN-FLAECHE + DRACHEN-HURT-SPRITES"
+(main.py vom 14.11., 23:44). pve_system.py & Co. wurden NICHT
+angefasst - nur main.py und das Tool.
+
+
+------------------------------------------------------------------
+1) "DER DRACHE DARF NICHT KLEINER WERDEN BEIM ANGREIFEN"
+------------------------------------------------------------------
+Vorher: Alle Zustaende ausser Idle wurden auf die CANVAS-Hoehe der
+Idle-Frames skaliert. Ein Sheet mit viel transparentem Rand (wie
+dein attack2) liess den Drachen damit schrumpfen - grosse Leinwand,
+kleiner Drache darin.
+
+Jetzt: Gemessen wird die SICHTBARE Drachen-Hoehe (hoechste opake
+Pixel-Box ueber alle Frames eines Zustands, Alpha-Schwelle 12 gegen
+Rausch-Pixel). Genau diese Hoehe wird ueber Idle, attack, attack2
+und hurt auf DENSELBEN Wert gebracht. Der Drache ist im 1. Angriff,
+im 2. Angriff und beim Treffer exakt so gross wie im Idle-Flug -
+egal welche Canvas-Groessen deine Sheets haben.
+
+Getestet (scripts/test_attack2_integration.py + test_tool_scan.py):
+  * attack2-Sheet mit riesigen leeren Raendern -> gleiche sichtbare
+    Hoehe wie Idle (vorher ~17 % kleiner)
+  * idle 8 / attack 8 / attack2 6 / hurt 8 Frames (2x4-Grid) sauber
+    gefiltert, alle Frames gleich gross
+  * nummerierte Frames (Tool-Variante) laden identisch
+
+
+------------------------------------------------------------------
+2) "ATTACK2 - DAS IST DER 2. ANGRIFF DES DRACHEN"
+------------------------------------------------------------------
+Der Drache hat neben dem Atem die ZUSATZ-ANGRIFFE aus
+pve_system._boss_extra_attack:
+  GLUTBOMBEN (atk_kind 2) -> spielt jetzt die attack2-Sequenz
+  EISSPIESSE (atk_kind 3) -> attack3-Sequenz, FALLS du spaeter einen
+                             Ordner enemys\enemy_dragon\attack3
+                             anlegst (sonst Idle wie bisher)
+
+Ablauf: Waehrend des Bomben-Telegrafen laeuft attack2, nach dem
+Wurf eine kurze Nachlauf-Phase (450 ms, DRAGON_EXTRA_LINGER_MS in
+main.py), dann zurueck ins Idle. Atem und hurt haben Vorrang (der
+Strahl haengt geometrisch am Attack-Sprite).
+
+Dein Sheet laedt AUTOMATISCH beim Spielstart - ganz ohne Tool-Lauf:
+  enemys\enemy_dragon\attack2\<irgendein name>.png
+Konsole beim Start:
+  [ANIM] Sheet gefunden: attack2-Sequenz von dragon -> N Frames (...)
+
+
+------------------------------------------------------------------
+3) TOOL: JETZT IDENTISCH ZUM SPIEL-FILTER
+------------------------------------------------------------------
+Das Tool hatte eine eigene (aeltere) Filter-Kopie - die konnte bei
+eng stehenden Frames Riesen-Zellen bauen. Die nummerierten Dateien
+haetten dann im Spiel den KORREKT automatischen Sheet-Schnitt
+ueberschrieben. Der Tool-Filter ist jetzt 1:1 derselbe Code wie in
+main.py (generiert ueber scripts/build_tool_from_main.py).
+
+Ein Lauf fuer alle Zustaende (aus DS4_AKTUELL):
+    python tools\sprite_splitter.py
+-> zerlegt idle, attack, attack2, hurt, ... in einem Rutsch und
+   schreibt enemy_dragon_<zustand>_0.png, _1.png, ... neben die
+   Sheets. Nummerierte Frames gewinnen im Spiel - praktisch, wenn
+   du die Frames einzeln nachschaerfen willst; ansonsten reicht das
+   automatische Sheet-Splitting voellig.
+
+
+------------------------------------------------------------------
+4) KONSOLCHECK
+------------------------------------------------------------------
+Beim Spielstart sollte u. a. stehen:
+  [ANIM] Sheet gefunden: attack2-Sequenz von dragon -> N Frames
+Stimmt N nicht mit deinem Sheet ueberein, das Tool aus Schritt 3
+laufen lassen und neu starten.
+
+Feinschliff:
+  * Nachlauf nach dem Bombenwurf: DRAGON_EXTRA_LINGER_MS (main.py)
+  * Drachen-Grundgroesse: ENEMY_IMG_W["dragon"] = 460 (main.py) -
+    alle Zustaende folgen automatisch.
+
+
+------------------------------------------------------------------
+5) WAS NICHT GEAENDERT HAT
+------------------------------------------------------------------
+  * Karte/Hit-Flaechen (welt_map.py) - unberuehrt
+  * hurt-Logik, Atem-Strahl, Telegraf-Optik - unberuehrt
+  * Balancing/Zahlen in pve_system.py - unberuehrt
