@@ -345,11 +345,889 @@ def _scaled(cache, key, img, s):
 # A2 (Nutzerwunsch "Der Eisdrache sollte auch etwas groesser sein"):
 # EISDRACHE 235 -> 300 (~x1.28); Kollisionsradius in pve_system
 # (BOSS_HIT_R dragon 60 -> 75) passt mit.
+# AUFTRAG DRACHE-GROSS (Nutzer: "mach den Drachen groesser, der wirkt
+# wie eine Fliege im Vergleich zum Schiff"): EISDRACHE 300 -> 460.
+# Das neue Sprite ist sehr breit (900x366, Seitansicht mit ausgebrei-
+# teten Fluegeln) - bei 300 wirkte der Koerper trotz Boss-Status klein
+# gegen das Schiff (160 px). 460 px = ~2.9x Schiffsbreite; BOSS_HIT_R
+# dragon waechst proportional mit (pve_system: 75 -> 110). BOSS_HOLD_X
+# 560 -> 445 (RANGE-FIX in pve_system: Bosse liegen innerhalb der
+# Zielrange der Kanonen; Drache spannt dann 162..728 bei Schiff x=120).
 ENEMY_IMG_W = {"skitter": 46, "shard": 50, "husk": 62, "wraith": 52,
                "hive": 78, "lancer": 112,
                "stalker": 68, "medusa": 64, "carrier": 110,
                "eye": 66, "crystal": 58,
-               "interceptor": 150, "brute": 195, "dragon": 300}
+               "interceptor": 150, "brute": 195, "dragon": 460}
+
+# ============================================================
+# AUFTRAG DRACHE-ANIMATIONEN (IDLE + ANGRIFF): Echte Frame-
+# Animationen aus PNGs.
+# Pfad-Konvention GENAU WIE IM REPO VORLIEGEND (nicht veraendern):
+#   enemys/enemy_<typ>/<zustand>/enemy_<typ>_<zustand>_<nr>.png (Nr ab 0)
+#   -> Idle:    enemys/enemy_dragon/idle/enemy_dragon_idle_0..7.png
+#   -> Angriff: enemys/enemy_dragon/attack/enemy_dragon_attack_0..7.png
+# Existiert eine Sequenz (mind. 2 Frames), uebernimmt sie die komplette
+# Optik des Typs im jeweiligen Zustand - das statische enemy_<typ>.png
+# und alle Zustands-Varianten (Maul zu/offen) bleiben Rueckfall.
+# SKALIERUNG (AUFTRAG ATTACK2, Nutzer: "Du musst bei beiden Angriffen
+# dafuer sorgen, dass die Groesse des Drachens gleich bleibt. Der Drache
+# darf nicht kleiner werden beim Angreifen."):
+# Idle laeuft auf die ENEMY_IMG_W-Breite (Drache 460) - wie bisher.
+# ALLE anderen Zustaende (attack, attack2, hurt, ...) werden ueber die
+# SICHTBARE Inhaltshoehe angeglichen: gemessen wird die hoechste opaque
+# Pixel-Box ueber alle Frames des Zustands (get_bounding_rect), und
+# genau diese Drachen-Hoehe wird auf die Idle-Drachen-Hoehe skaliert.
+# Vorher wurde die CANVAS-Hoehe angeglichen - ein Sheet mit viel
+# transparentem Rand (wie attack2) liess den Drachen damit schrumpfen.
+# Jetzt ist die sichtbare Drachengroesse in Idle = Angriff = 2. Angriff
+# = Hurt identisch, egal wie gross die Sheets/Canvases geliefert werden.
+# Das wirkt GENERISCH: gleich aufgebaute Ordner fuer andere Typen,
+# Zustaende (auch attack3 fuer den EISSPIESS) animieren automatisch
+# mit - ohne weitere Code-Aenderung.
+ANIM_FPS = 8.0            # Animationstempo (Frames pro Sekunde)
+_enemy_anim_cache = {}
+
+
+def _anim_content_h(frames):
+    """AUFTRAG ATTACK2: sichtbare Inhaltshoehe eines Animations-Zustands
+    = hoechste Bounding-Box opaker Pixel ueber alle Frames. Alpha-
+    Schwelle 12 ignoriert Rausch-Pixel; gemessen wird der DRACHE, nicht
+    die Leinwand (Canvas) - genau dagegen hat der Nutzer gekaempft."""
+    best = 0
+    for f in frames or ():
+        try:
+            r = f.get_bounding_rect(min_alpha=12)
+        except TypeError:          # aelteres pygame ohne kw-Arg
+            r = f.get_bounding_rect()
+        best = max(best, int(r.height))
+    return best
+
+
+def load_enemy_anim(enemy_type, state="idle"):
+    """Laedt die Animation eines Gegnertyps fuer einen Zustand
+    (einmalig, gecacht). Liefert eine Liste VORSKALIERTER Frames oder
+    eine LEERE Liste, wenn keine/weniger als 2 Frames im Ordner liegen
+    - dann greift alles unveraendert auf das statische Sprite zurueck.
+    Fremd-Zustaende (attack, attack2, hurt, ...) werden auf DIESELBE
+    SICHTBARE Hoehe wie Idle gebracht -> der Drache bleibt in jedem
+    Zustand gleich gross, kein Schrumpfen beim Angriff."""
+    cache_key = (enemy_type, state)
+    if cache_key in _enemy_anim_cache:
+        return _enemy_anim_cache[cache_key]
+    frames = []
+    anim_ordner = os.path.join(ENEMY_FOLDER, f"enemy_{enemy_type}", state)
+    idx = 0
+    while idx <= 64:          # harte Obergrenze = Schutz bei kaputten Dateien
+        path = os.path.join(anim_ordner,
+                            f"enemy_{enemy_type}_{state}_{idx}.png")
+        if not os.path.exists(path):
+            break
+        try:
+            frames.append(pygame.image.load(path).convert_alpha())
+        except Exception:
+            break
+        idx += 1
+    if len(frames) < 2:
+        # AUFTRAG DRACHEN-HURT: Keine (oder < 2) nummerierte Frames?
+        # Dann Spritesheet suchen und die Sequenz automatisch
+        # herausfiltern (Spalten-Luecken oder gleichmaessige Teilung).
+        frames = _load_anim_sheet(enemy_type, state)
+    if len(frames) >= 2:
+        w0, h0 = frames[0].get_size()
+        if state == "idle":
+            # Idle: Zielbreite = ENEMY_IMG_W des Typs (wie bisher -
+            # diese Optik ist abgenommen).
+            target_w = ENEMY_IMG_W.get(enemy_type, 70)
+            target_h = max(1, int(h0 * (target_w / max(1, w0))))
+        else:
+            # AUFTRAG ATTACK2: Angriff & Co. ueber die SICHTBARE
+            # Inhaltshoehe angleichen. Vorher wurde die Canvas-Hoehe
+            # an Idle angepasst - Sheets mit transparentem Rand haben
+            # den Drachen damit kleiner gezeichnet. Jetzt gilt: hoechste
+            # sichtbare Drachen-Box des Zustands == hoechste sichtbare
+            # Idle-Drachen-Box -> exakt gleich gross in jedem Zustand.
+            ref = load_enemy_anim(enemy_type, "idle")
+            ref_h = _anim_content_h(ref) if ref else 0
+            own_h = _anim_content_h(frames)
+            if ref_h > 4 and own_h > 4:
+                k = ref_h / float(own_h)
+                target_w = max(2, int(round(w0 * k)))
+                target_h = max(2, int(round(h0 * k)))
+            elif ref:
+                # Fallback (keine messbare Content-Box): Canvas-Hoehe
+                # wie bisher.
+                target_h = ref[0].get_height()
+                target_w = max(2, int(w0 * (target_h / max(1, h0))))
+            else:
+                target_w = ENEMY_IMG_W.get(enemy_type, 70)
+                target_h = max(1, int(h0 * (target_w / max(1, w0))))
+        frames = [pygame.transform.smoothscale(f, (target_w, target_h))
+                  for f in frames]
+    else:
+        frames = []
+    _enemy_anim_cache[cache_key] = frames
+    return frames
+
+
+def _enemy_anim_idx(enemy_type, state="idle"):
+    """Aktuelle Frame-Nummer nach der globalen Spiel-Uhr. Alle Gegner
+    desselben Typs laufen dadurch synchron und loopen endlos."""
+    frames = load_enemy_anim(enemy_type, state)
+    if not frames:
+        return 0
+    return int((pygame.time.get_ticks() / 1000.0) * ANIM_FPS) % len(frames)
+
+
+# ============================================================
+# AUFTRAG DRACHEN-HURT 2.0 (Nutzer: "Du hast beim Boss-Schaden die
+# Bilder nicht aus dem Sprite sheet extrahiert. Du hast womoeglich
+# das richtige gemacht aber es sieht nicht gut aus. Die Einzelnen
+# Sprites muessen aus dem Bild gefiltert und separat eingesetzt
+# werden."):
+# Der erste Splitter trennte nur nach Spalten-Luecken. Ein echtes
+# Sheet besteht aber pro Frame aus MEHReren alpha-getrennten Teilen
+# (Koerper, Fluegel, Effekte - Luecken 2-3 px) und die Frames selbst
+# trennen GROSSE Luecken (~130 px) - der erste Splitter schnitt
+# deshalb 27 Mini-Frames statt 8 Drachen-Frames heraus.
+# Der neue Filter findet die EINZELNEN Sprites wirklich:
+#   1. Hintergrund-Erkennung (opaker Rand) + Befreiung des Motivs
+#      per cv2-Flood-Fill von den Raendern (optional, ohne cv2 wird
+#      der Farb-Key benutzt - alles mit try/except abgesichert).
+#   2. ECHTE Sprite-Filterung: Connected Components ueber die
+#      Content-Maske (pygame.mask, C-Tempo) -> Bounding-Box je
+#      zusammenhaengender Sprite-Gruppe.
+#   3. Teile -> Frames per LUECKEN-CLUSTERING: kleine Luecken
+#      (Sprite-Teile desselben Frames) verschmelzen, grosse Luecken
+#      (zwischen Frames) trennen - die Schwelle liegt automatisch in
+#      der groessten multiplikativen Sprungstelle der Luecken-Groessen.
+#      Abgetrennte Kleinteile (Feuerball ueber dem Kopf) wandern in
+#      ihr Frame, 2-Reihen-Grids bleiben erhalten (row-major).
+#   4. Alle Frames landen 1:1 an ihrer Sheet-Position auf gleich
+#      grossen transparenten Leinwaenden -> gleiche Groesse und
+#      Ausrichtung, keine Groessen-Spruenge im Animations-Wechsel.
+#   5. Fallbacks: Profil-Runs mit demselben Clustering, dann
+#      Perioden-Erkennung ueber die AUTOKORRELATION des Profils
+#      (lueckenlose Streifen: die Frame-Anzahl, deren Schrittweite das
+#      Profil sauber wiederholt und deren HALBE Schrittweite nicht).
+# Validiert gegen das ECHTE Idle-Sheet (8192x420): 8 Frames,
+# Inhalt-IoU 1.000 je Frame; lueckenlos/Grid/Hintergrund/Hochkant/
+# mehrteilig je 8/8 (scripts/test_anim_sheet_filter.py).
+# ============================================================
+def _downscaled(sheet, maxdim=1024):
+    w, h = sheet.get_size()
+    k = min(1.0, maxdim / float(max(w, h)))
+    if k >= 1.0:
+        return sheet, 1.0
+    nw, nh = max(2, int(w * k)), max(2, int(h * k))
+    return pygame.transform.smoothscale(sheet, (nw, nh)), k
+
+
+def _detect_background(sheet):
+    """Liefert (bg_color|None, bg_share). Deckt der Bildrand opaque und
+    einfarbig, ist das ein Sheet MIT Hintergrund (z. B. JPG/Export)."""
+    small, _k = _downscaled(sheet, 512)
+    w, h = small.get_size()
+    border = []
+    for x in range(0, w, 2):
+        border.append(small.get_at((x, 0)))
+        border.append(small.get_at((x, h - 1)))
+    for y in range(0, h, 2):
+        border.append(small.get_at((0, y)))
+        border.append(small.get_at((w - 1, y)))
+    opaque = [c for c in border if c.a >= 200]
+    if len(opaque) < 0.55 * len(border):
+        return None, 0.0
+    counts = {}
+    for c in opaque:
+        key = (c.r // 16 * 16, c.g // 16 * 16, c.b // 16 * 16)
+        counts[key] = counts.get(key, 0) + 1
+    col, n = max(counts.items(), key=lambda kv: kv[1])
+    return col, n / float(len(border))
+
+
+def _content_mask(sheet):
+    """Content-Maske: Bits = zum Motiv gehoerige Pixel.
+    -> (maske, hatte_hintergrund, hintergrundfarbe). Die Maske dient der
+    BLOCK-Suche (Komponenten); die saubere Pixel-Befreiung vom
+    Hintergrund macht _cleaned_surface (Flood-Fill von den Raendern)."""
+    bg_col, share = _detect_background(sheet)
+    if bg_col is not None:
+        bg_mask = pygame.mask.from_threshold(
+            sheet, bg_col, threshold=(14, 14, 14, 255))
+        bg_mask.invert()                     # in-place: Bits = Motiv
+        if bg_mask.count() > 0:
+            return bg_mask, True, bg_col
+    return pygame.mask.from_surface(sheet, threshold=0), False, None
+
+
+def _bg_border_seeds(img, bg_col, max_step=96):
+    """Seed-Punkte am Bildrand, die zum Hintergrund passen (numpy-Array
+    HxWx4, Hintergrund quantisiert) - Startpunkte des Flood-Fills."""
+    import numpy as np
+    h, w = img.shape[0], img.shape[1]
+    bg = np.array(bg_col, dtype=np.int16)
+    seeds = []
+    pts = []
+    for x in range(0, w, max(1, min(max_step, w // 4 or 1))):
+        pts += [(x, 0), (x, h - 1)]
+    for y in range(0, h, max(1, min(max_step, h // 4 or 1))):
+        pts += [(0, y), (w - 1, y)]
+    for (x, y) in pts:
+        px = img[y, x, :3].astype(np.int16)
+        if np.abs(px - bg).max() <= 20:
+            seeds.append((int(x), int(y)))
+    return seeds
+
+
+def _bg_clean_cv2(sheet, bg_col):
+    """Hintergrund per Flood-Fill von allen Rand-Seeds entfernen (cv2,
+    C-Tempo). Im Gegensatz zum Farb-Key werden nur ERREICHBARE
+    Hintergrund-Pixel entfernt - dunkle Motiv-Partien bleiben ganz.
+    Liefert convert_alpha-Surface oder None (cv2/numpy fehlt)."""
+    try:
+        import cv2
+        import numpy as np
+    except Exception:
+        return None
+    try:
+        w, h = sheet.get_size()
+        src = sheet.convert_alpha()
+        raw = pygame.image.tobytes(src, "RGBA")
+        img = np.frombuffer(raw, np.uint8).reshape((h, w, 4))
+        bgr = np.ascontiguousarray(img[:, :, :3][:, :, ::-1])
+        work = bgr.copy()
+        mask2 = np.zeros((h + 2, w + 2), np.uint8)
+        flags = 4 | cv2.FLOODFILL_MASK_ONLY | (255 << 8)
+        for seed in _bg_border_seeds(img, bg_col):
+            if mask2[seed[1] + 1, seed[0] + 1]:
+                continue
+            cv2.floodFill(work, mask2, seed, 0,
+                          loDiff=(8, 8, 8), upDiff=(8, 8, 8),
+                          flags=flags)
+        bg = mask2[1:-1, 1:-1] > 0
+        content = (~bg).astype(np.uint8)
+        kern = np.ones((5, 5), np.uint8)
+        content = cv2.morphologyEx(content, cv2.MORPH_CLOSE, kern)
+        out = src.copy()
+        pa = pygame.surfarray.pixels_alpha(out)
+        pa[:] = np.transpose(content * 255).astype(np.uint8)
+        del pa
+        return out
+    except Exception:
+        return None
+
+
+def _cleaned_surface(sheet, mask, had_bg, bg_col=None):
+    """Sheet mit entferntem Hintergrund: 1. Wahl cv2-Flood-Fill (keine
+    Loecher im Motiv), Fallback Mask.to_surface (Faerbung strikt)."""
+    if not had_bg:
+        return sheet
+    if bg_col is not None:
+        out = _bg_clean_cv2(sheet, bg_col)
+        if out is not None:
+            return out
+    try:
+        blank = pygame.Surface(sheet.get_size(), pygame.SRCALPHA)
+        src = sheet.convert_alpha()
+        strict = pygame.mask.from_threshold(
+            sheet, bg_col, threshold=(8, 8, 8, 255))
+        strict.invert()
+        return strict.to_surface(setsurface=src, unsetsurface=blank,
+                                 setcolor=None, unsetcolor=(0, 0, 0, 0))
+    except Exception:
+        return sheet
+
+
+def _component_boxes(mask):
+    """Bounding-Boxen aller zusammenhaengenden Content-Bloecke."""
+    boxes = []
+    try:
+        comps = mask.connected_components(1)
+    except Exception:
+        try:
+            comps = mask.connected_components()
+        except Exception:
+            return boxes
+    mw, mh = mask.get_size()
+    min_area = max(24, (mw * mh) // 40000)
+    for c in comps:
+        if c.count() < min_area:
+            continue
+        pts = c.outline()
+        if not pts:
+            continue
+        xs = [p[0] for p in pts]
+        ys = [p[1] for p in pts]
+        x0, x1 = min(xs), max(xs)
+        y0, y1 = min(ys), max(ys)
+        if x1 - x0 >= 2 and y1 - y0 >= 2:
+            boxes.append(pygame.Rect(x0, y0, x1 - x0 + 1, y1 - y0 + 1))
+    return boxes
+
+
+def _y_overlap(a, b, frac=0.35):
+    ov = min(a.bottom, b.bottom) - max(a.top, b.top)
+    return ov > frac * min(a.h, b.h)
+
+
+def _gap_mode(gaps, median_w):
+    """Drei Faelle der Luecken zwischen Content-Bloecken (auf der
+    Streifen-Achse sortiert):
+      'parts'      - alle Luecken winzig (Sprite-Teile desselben
+                     Frames, z. B. 2-3 px) -> ALLES verschmilzt, die
+                     Perioden-Erkennung uebernimmt.
+      'clusters'   - klare zwei Groessenklassen (Teile 2-3 px vs.
+                     Frames ~130 px) -> Schwelle im groessten
+                     multiplikativen Sprung.
+      'separated'  - Luecken gleichmaessig SUBSTANZIELL -> die Bloecke
+                     SIND bereits die Frames (nicht verschmelzen!).
+    """
+    pos = sorted(g for g in gaps if g > 0)
+    if not pos:
+        return "parts", 1e9
+    small_abs = max(4.0, 0.02 * median_w)
+    if pos[-1] <= small_abs:
+        return "parts", 1e9
+    if pos[-1] / max(1.0, float(pos[0])) >= 3.0:
+        best_i, best_ratio = 0, 0.0
+        for i in range(len(pos) - 1):
+            ratio = pos[i + 1] / max(1.0, float(pos[i]))
+            if ratio > best_ratio:
+                best_ratio, best_i = ratio, i
+        return "clusters", (pos[best_i] + pos[best_i + 1]) / 2.0
+    return "separated", 0.0
+
+
+def _merge_boxes_to_frames(boxes, horizontal):
+    """Content-Bloecke -> Frames. Streifen-Achse: horizontal (w >= h)
+    oder vertikal. Modus 'separated': Bloecke sind bereits Frames -
+    ABER erst nach Sanitaets-Check (Rausch-/Teil-Boxen aussieben,
+    einheitliche Breiten - sonst ist 'separiert' nur scheinbar so und
+    es folgt die y-Band-Verschmelzung + Perioden-Erkennung).
+    Modus 'clusters': Verschmelzen kleiner Teile-Luecken (nur bei
+    y-Ueberlappung). Modus 'parts': alles verschmilzt (-> Fallback).
+    Danach: Kleinteile (Effekt-Orb) dem Frame im selben x-Bereich
+    zuschlagen, ungewoehlich breite Boxen teilen, row-major ordnen."""
+    if not boxes:
+        return []
+
+    def _sorted(bs):
+        return sorted(bs, key=(lambda r: (r.x, r.y)) if horizontal
+                      else (lambda r: (r.y, r.x)))
+
+    def _gaps(bs):
+        if horizontal:
+            return [bs[i + 1].x - (bs[i].x + bs[i].width)
+                    for i in range(len(bs) - 1)]
+        return [bs[i + 1].y - (bs[i].y + bs[i].height)
+                for i in range(len(bs) - 1)]
+
+    boxes = _sorted(boxes)
+    widths = sorted(b.width for b in boxes)
+    median_w = widths[len(widths) // 2]
+    mode, thr = _gap_mode(_gaps(boxes), median_w)
+    if mode == "separated":
+        # Sanitaets-Check: echter Frame-Streifen oder nur Stueckwerk?
+        # (a) Rausch-/Teil-Boxen mit < 4 % der 75-%-Flaeche fliegen.
+        areas = sorted(b.width * b.height for b in boxes)
+        ref = areas[int(len(areas) * 0.75)]
+        boxes = [b for b in boxes
+                 if b.width * b.height >= max(200.0, 0.04 * ref)]
+        if len(boxes) >= 2:
+            boxes = _sorted(boxes)
+            widths = sorted(b.width for b in boxes)
+            median_w = widths[len(widths) // 2]
+            mode, thr = _gap_mode(_gaps(boxes), median_w)
+            # (b) Breiten-Mix: groesste >> median -> Fragmente statt
+            # Frames (z. B. Drache + gleichmaessig verteilte Effekt-
+            # Stueckchen) -> Verschmelzen + Perioden-Erkennung.
+            if mode == "separated" and max(widths) > 2.5 * median_w:
+                mode = "parts"
+        else:
+            mode = "parts"
+    if mode == "separated":
+        merged = [b.copy() for b in boxes]
+    elif mode == "clusters":
+        merged = [boxes[0].copy()]
+        for i in range(1, len(boxes)):
+            prev = merged[-1]
+            if horizontal:
+                gap = boxes[i].x - (prev.x + prev.width)
+            else:
+                gap = boxes[i].y - (prev.y + prev.height)
+            if gap < thr and _y_overlap(prev, boxes[i]):
+                prev.union_ip(boxes[i])
+            else:
+                merged.append(boxes[i].copy())
+    else:  # parts: nur innerhalb y-Baender verschmelzen (Grids bleiben)
+        merged = [boxes[0].copy()]
+        for i in range(1, len(boxes)):
+            prev = merged[-1]
+            if _y_overlap(prev, boxes[i]):
+                prev.union_ip(boxes[i])
+            else:
+                merged.append(boxes[i].copy())
+    # Abgetrennte Kleinteile (Effekt-Orb ueber dem Kopf) dem Frame im
+    # selben Streifen-Bereich zuschlagen: voll enthalten, deutlich
+    # schmaler, vertikal nahe.
+    widths = sorted(b.width for b in merged)
+    median_w = widths[len(widths) // 2]
+    keep = [True] * len(merged)
+    order = sorted(range(len(merged)),
+                   key=lambda i: merged[i].width, reverse=True)
+    for j in order:
+        if not keep[j]:
+            continue
+        big = merged[j]
+        for i in range(len(merged)):
+            if i == j or not keep[i]:
+                continue
+            small = merged[i]
+            if (small.width <= 0.6 * big.width
+                    and small.x >= big.x and small.right <= big.right
+                    and (small.top - big.top) < 0.5 * big.h
+                    and small.y >= big.y - big.h * 0.35):
+                big.union_ip(small)
+                keep[i] = False
+    merged = [b for b, k in zip(merged, keep) if k]
+    # Sicherheit: ungewoehlich breite Box (aneinanderklebende Frames)
+    # in round(w / median) gleiche Zellen teilen.
+    out = []
+    for b in merged:
+        if median_w > 0 and b.width > 1.8 * median_w:
+            n = max(2, int(round(b.width / float(median_w))))
+            step = b.width / float(n)
+            for k in range(n):
+                x0 = b.x + int(round(k * step))
+                x1 = b.x + int(round((k + 1) * step))
+                out.append(pygame.Rect(x0, b.y, x1 - x0, b.h))
+        else:
+            out.append(b)
+    # row-major Ordnung: y-Baender, darin links -> rechts
+    out.sort(key=lambda r: (r.y + r.h / 2.0, r.x))
+    bands = []
+    for r in out:
+        placed = False
+        for band in bands:
+            ref = band[0]
+            ov = min(ref.bottom, r.bottom) - max(ref.top, r.top)
+            if ov > 0.5 * min(ref.h, r.h):
+                band.append(r)
+                placed = True
+                break
+        if not placed:
+            bands.append([r])
+    bands.sort(key=lambda band: min(r.y for r in band))
+    ordered = []
+    for band in bands:
+        band.sort(key=lambda r: r.x)
+        ordered.extend(band)
+    return ordered
+
+
+def _aligned_frames(cleaned, boxes):
+    """Jede Box zentriert auf eine gemeinsame, gleich grosse transpa-
+    rente Leinwand blitten -> einheitliche Frame-Groesse UND - und das
+    ist fuer die Animation entscheidend - das Motiv sitzt in JEDER
+    Frame an derselben Stelle (das Spiel zeichnet das Sprite zentriert
+    auf die Gegner-Position; wuerde man die Sheet-Positionen 1:1
+    erhalten, wuerde das Motiv pro Frame quer ueber den Schirm
+    springen)."""
+    gw = max(b.width for b in boxes)
+    gh = max(b.height for b in boxes)
+    frames = []
+    for b in boxes:
+        part = cleaned.subsurface((b.x, b.y, b.width, b.height))
+        canvas = pygame.Surface((gw, gh), pygame.SRCALPHA)
+        canvas.blit(part, ((gw - b.width) // 2, (gh - b.height) // 2))
+        frames.append(canvas)
+    return frames
+
+
+def _profile_runs_1d(profile, min_val, gap):
+    runs, start, empty = [], None, 0
+    for i, val in enumerate(profile):
+        if val >= min_val:
+            if start is None:
+                start = i
+            empty = 0
+        elif start is not None:
+            empty += 1
+            if empty >= gap:
+                runs.append((start, i - empty + 1))
+                start, empty = None, 0
+    if start is not None:
+        runs.append((start, len(profile)))
+    return [r for r in runs if r[1] - r[0] >= 2]
+
+
+def _shift_diff(prof, step):
+    """Mittlerer Profil-Unterschied bei Verschiebung um step (wrap-
+    around, das Sheet ist ein Loop)."""
+    n = len(prof)
+    s = int(round(step))
+    if s <= 0 or s >= n:
+        return 1.0
+    total = 0
+    for x in range(n):
+        total += abs(prof[x] - prof[(x + s) % n])
+    return total / float(n * 255)
+
+
+def _axis_profile(surface, horizontal, had_bg=False, bg_col=None):
+    """1D-Inhalts-Profil entlang der Streifen-Achse (0..255).
+    Transparente Sheets: gemitteltes ALPHA je Spalte/Reihe.
+    Hintergrund-Sheets: gemittelter FARB-ABSTAND zum Hintergrund
+    (Alpha ist dort konstant 255 und damit nutzlos)."""
+    w, h = surface.get_size()
+    outer = w if horizontal else h
+    if outer < 2:
+        return [], 4
+    strip = pygame.transform.smoothscale(
+        surface, (outer, 1)) if horizontal else pygame.transform.smoothscale(
+            surface, (1, outer))
+    if not had_bg or bg_col is None:
+        prof = [strip.get_at((i, 0) if horizontal else (0, i)).a
+                for i in range(outer)]
+        return prof, 4
+    br, bg_, bb = bg_col
+    prof = []
+    for i in range(outer):
+        c = strip.get_at((i, 0) if horizontal else (0, i))
+        d = max(abs(c.r - br), abs(c.g - bg_), abs(c.b - bb))
+        prof.append(min(255, d * 3))         # Kontrast fuer die Schwelle
+    return prof, 12
+
+
+def _best_strip_count(sheet, horizontal, had_bg=False, bg_col=None):
+    """Perioden-Erkennung fuer lueckenlose Streifen via AUTOKORRELATION:
+    Gut ist eine Frame-Anzahl n, deren Schrittweite das Profil sauber
+    wiederholt (kleiner Shift-Diff) UND deren HALBE Schrittweite es
+    NICHT schon wiederholt (Grundperiode, kein Vielfaches). Bevorzugt
+    kleinere n bei Gleichstand."""
+    small, _k = _downscaled(sheet, 1024)
+    ow, oh = small.get_size()
+    horizontal = ow >= oh
+    prof, _mv = _axis_profile(small, horizontal, had_bg, bg_col)
+    outer = len(prof)
+    best_n, best_score = None, None
+    scores = {}
+    for n in range(2, 25):
+        step = outer / float(n)
+        if step < 8:
+            break
+        d = _shift_diff(prof, step)
+        d_half = (_shift_diff(prof, step / 2.0)
+                  if step / 2.0 >= 8 else d)
+        seg_mass = []
+        for i in range(n):
+            a, b = int(round(i * step)), int(round((i + 1) * step))
+            seg_mass.append(sum(prof[a:b]))
+        mean_m = sum(seg_mass) / float(n)
+        cv = 0.0
+        if mean_m > 0:
+            var = sum((m - mean_m) ** 2 for m in seg_mass) / float(n)
+            cv = (var ** 0.5) / mean_m
+        score = d - 0.8 * d_half + 0.15 * cv
+        scores[n] = score
+        if best_score is None or score < best_score:
+            best_n, best_score = n, score
+    if best_n is None:
+        w, h = sheet.get_size()
+        return max(2, min(32, int(round(max(w, h) / float(min(w, h))))))
+    # Gleichstand: kleinere n bevorzugen (Uebersegmentierung vermeiden)
+    for n in range(2, best_n):
+        if n in scores and scores[n] <= best_score * 1.08:
+            return n
+    return best_n
+
+
+def _plausible_frames(boxes):
+    """Plausibilitaets-Filter fuer Komponenten-Ergebnisse bei Backgrund-
+    Sheets (Rausch-Sprenkel und Fragmente aussieben). Nur Boxen mit
+    >= 2 % der groessten Flaeche und >= 12 % der groessten Breite
+    bleiben; mehr als 24 Frames sind unplaussibel."""
+    if len(boxes) < 2 or len(boxes) > 24:
+        return []
+    max_a = max(b.width * b.height for b in boxes)
+    max_w = max(b.width for b in boxes)
+    keep = [b for b in boxes
+            if b.width * b.height >= 0.02 * max_a
+            and b.width >= 0.12 * max_w]
+    return keep if len(keep) >= 2 else []
+
+
+def _split_anim_sheet(sheet):
+    """Filtert die EINZELNEN Sprites aus einem Spritesheet. Liefert eine
+    Liste gleich grosser, ausgerichteter Frames (>= 2) oder []."""
+    w, h = sheet.get_size()
+    if w < 4 or h < 4:
+        return []
+    try:
+        mask, had_bg, bg_col = _content_mask(sheet)
+    except Exception:
+        mask, had_bg, bg_col = (pygame.mask.from_surface(sheet,
+                                  threshold=0), False, None)
+    cleaned = _cleaned_surface(sheet, mask, had_bg, bg_col)
+    # Bei Hintergrund-Sheets wird Pfad 2/3 auf dem ORIGINAL geschnitten
+    # (die Bereinigung kann bei Motiv-farbigem Grund rueckresten) - die
+    # Bereinigung dient nur Pfad 1 (Komponenten-Boxen).
+    prof_sheet = sheet if had_bg else cleaned
+
+    # --- Pfad 1: ECHTE Sprite-Filterung (Connected Components) -------
+    box_mask = mask
+    if had_bg and cleaned is not sheet:
+        try:
+            bm = pygame.mask.from_surface(cleaned, threshold=0)
+            if bm.count() > 0:
+                box_mask = bm
+        except Exception:
+            pass
+    try:
+        boxes = _component_boxes(box_mask)
+        boxes = _merge_boxes_to_frames(boxes, w >= h)
+        if had_bg:
+            boxes = _plausible_frames(boxes)
+    except Exception:
+        boxes = []
+    if len(boxes) >= 2:
+        try:
+            return _aligned_frames(cleaned, boxes)
+        except Exception:
+            pass
+
+    # --- Pfad 2: Profil-Fallback (Luecken in einer Achse) ------------
+    horizontal = w >= h
+    outer, inner = (w, h) if horizontal else (h, w)
+    prof, min_val = _axis_profile(prof_sheet, horizontal, had_bg, bg_col)
+    runs = _profile_runs_1d(prof, min_val, 2)
+    frames = []
+    if len(runs) >= 2:
+        inner_per_run = []
+        for (a0, a1) in runs:
+            if horizontal:
+                sub = prof_sheet.subsurface((a0, 0, a1 - a0, h))
+            else:
+                sub = prof_sheet.subsurface((0, a0, w, a1 - a0))
+            prof2, mv2 = _axis_profile(sub, not horizontal,
+                                       had_bg, bg_col)
+            inner_per_run.append(_profile_runs_1d(prof2, mv2, 1))
+        counts = {len(r) for r in inner_per_run}
+        if len(counts) == 1 and next(iter(counts)) >= 2:
+            # GRID-Sheet: jede Spalte enthaelt gleich viele Reihen ->
+            # Zellen row-major herausfiltern.
+            k = next(iter(counts))
+            if horizontal:
+                for j in range(k):
+                    for (a0, a1), iruns in zip(runs, inner_per_run):
+                        b0, b1 = iruns[j]
+                        frames.append(prof_sheet.subsurface(
+                            (a0, b0, a1 - a0, b1 - b0)).copy())
+            else:
+                for (a0, a1), iruns in zip(runs, inner_per_run):
+                    for j in range(k):
+                        b0, b1 = iruns[j]
+                        frames.append(prof_sheet.subsurface(
+                            (b0, a0, b1 - b0, a1 - a0)).copy())
+            return frames
+        # Streifen: Mini-Bloecke (Sprite-Teile) zuerst wie in Pfad 1
+        # clusterieren - sind danach < 2 Bloecke, ist der Streifen
+        # lueckenlos/parts -> Perioden-Erkennung (Pfad 3) uebernehmen.
+        run_rects = [(pygame.Rect(a0, 0, a1 - a0, h) if horizontal
+                      else pygame.Rect(0, a0, w, a1 - a0))
+                     for (a0, a1) in runs]
+        try:
+            merged_runs = _merge_boxes_to_frames(run_rects, horizontal)
+        except Exception:
+            merged_runs = run_rects
+        if len(merged_runs) < 2:
+            frames = []
+        else:
+            inner_runs = [r for iruns in inner_per_run for r in iruns]
+            if inner_runs:
+                i0 = max(0, min(r0 for r0, _r1 in inner_runs))
+                i1 = min(inner, max(r1 for _r0, r1 in inner_runs))
+            else:
+                i0, i1 = 0, inner
+            for b in merged_runs:
+                if horizontal:
+                    frames.append(prof_sheet.subsurface(
+                        (b.x, i0, b.width, i1 - i0)).copy())
+                else:
+                    frames.append(prof_sheet.subsurface(
+                        (i0, b.y, i1 - i0, b.height)).copy())
+        if frames:
+            return frames
+
+    # --- Pfad 3: lueckenlos -> Perioden-Erkennung -> gleiche Teilung -
+    n = _best_strip_count(prof_sheet, horizontal, had_bg, bg_col)
+    step = outer / float(n)
+    for i in range(n):
+        a0, a1 = int(round(i * step)), int(round((i + 1) * step))
+        if horizontal:
+            frames.append(prof_sheet.subsurface((a0, 0, a1 - a0, h)).copy())
+        else:
+            frames.append(prof_sheet.subsurface((0, a0, w, a1 - a0)).copy())
+    return frames
+
+def _anim_sheet_candidates(enemy_type, state):
+    """Alle sinnvollen Sheet-Pfade fuer einen Zustand (gepruefte
+    Reihenfolge: genau benannte Datei zuerst, dann Rest des Ordners)."""
+    base = os.path.join(ENEMY_FOLDER, f"enemy_{enemy_type}")
+    cands = []
+    for ext in (".png", ".jpg", ".jpeg"):
+        # enemys/enemy_dragon/hurt.png bzw. enemys/enemy_dragon_hurt.png
+        cands.append(os.path.join(base, f"{state}{ext}"))
+        cands.append(os.path.join(
+            ENEMY_FOLDER, f"enemy_{enemy_type}_{state}{ext}"))
+    folder = os.path.join(base, state)
+    if os.path.isdir(folder):
+        try:
+            entries = sorted(os.listdir(folder))
+        except OSError:
+            entries = []
+        named, other = [], []
+        for name in entries:
+            low = name.lower()
+            if not low.endswith((".png", ".jpg", ".jpeg")):
+                continue
+            if low.startswith("_"):
+                continue          # _debug/_cache-Bilder bewusst ignorieren
+            (named if ("sheet" in low or state in low)
+             else other).append(os.path.join(folder, name))
+        cands += named + other
+    return cands
+
+
+def _load_anim_sheet(enemy_type, state):
+    """Sucht + filtert das Spritesheet eines Zustands. Liefert >= 2
+    Frames oder [] (dann greift alles wie bisher)."""
+    for path in _anim_sheet_candidates(enemy_type, state):
+        try:
+            sheet = pygame.image.load(path).convert_alpha()
+        except Exception:
+            continue
+        frames = _split_anim_sheet(sheet)
+        if len(frames) >= 2:
+            print(f"[ANIM] Sheet gefunden: {state}-Sequenz von "
+                  f"{enemy_type} -> {len(frames)} Frames "
+                  f"({os.path.basename(path)})")
+            return frames
+    return []
+
+
+def _enemy_ckey(enemy_type, state="idle"):
+    """Cache-Key fuer _scaled(): beim statischen Sprite der Typname,
+    bei laufender Animation Typ + Zustand + Frame-Index - sonst wuerde
+    der _scaled-Cache den ersten Animations-Frame dauerhaft einfrieren."""
+    if load_enemy_anim(enemy_type, state):
+        return f"{enemy_type}#{state}#{_enemy_anim_idx(enemy_type, state)}"
+    return enemy_type
+
+# ============================================================
+# AUFTRAG DRACHEN-STRAHL-FIX (Nutzer: "Der Strahl wird irgendwie
+# von dir animiert ab der Mitte - sieht schlecht aus. Der Strahl
+# vom PNG muesste weitergefuehrt werden."):
+# Die ATTACK-Frames enthalten den Eis-Strahl ALS KUNSTWERK - er
+# startet am Maul und ist am rechten Frame-Rand abgeschnitten.
+# Per Pixelanalyse (Frames 2-4) GEMESSEN, Bruchteile der Frame-
+# Groesse (1026x338):
+#   Maul / Strahl-Ursprung : x 0.74, y 0.50
+#   Strahl-Mitte am Rand   : y 0.449 (Streuung < 1 px -> stabil)
+#   Strahlbreite am Rand   : ~0.08 der Frame-Hoehe (Halbbreite 0.04)
+#   Kunstwerk-Steigung     : ~3.9 deg nach oben (Maul 0.50 -> Rand
+#                            0.449 ueber 0.26 Framebreiten; nach dem
+#                            Spiegeln zeigt der Strahl links leicht
+#                            nach OBEN)
+# Die alten Pauschal-Anker (-44 % Frambreite) lagen VOR dem Maul -
+# deshalb schien der alte Feuer-Strahl "ab der Mitte" zu starten.
+# Der neue Renderer setzt am PNG-Strahl an und fuehrt ihn fort.
+# Zusaetzlich laeuft die Attack-Animation in TEILMENGEN: Frames
+# 0-1 = Aufladen (Telegraf, Kugel glimmt im Maul), 2-5 = Strahl
+# aktiv. Vorher liefen alle 8 Frames im Loop - der eingebaute
+# PNG-Strahl "blinzelte" also 8x pro Sekunde mitten im Angriff.
+DRAGON_ATTACK_SUBSETS = {"telegraph": (0, 1), "fire": (2, 3, 4, 5)}
+DRAGON_ATK_MOUTH_FRAC = (0.74, 0.50)      # Strahl-Ursprung im Frame
+DRAGON_ATK_EDGE_Y_FRAC = 0.449            # Strahl-Mitte am Frame-Rand
+DRAGON_ATK_HALFW_FRAC = 0.040             # Strahl-Halbbreite am Rand
+DRAGON_ATK_ART_TILT = math.radians(3.9)   # Kunstwerk-Steigung
+DRAGON_IDLE_MOUTH_FRAC = (0.94, 0.50)     # Maul der Idle-Frames
+DRAGON_STATIC_MOUTH_FRAC = (0.94, 0.56)   # altes Standbild (Faktor 0.44)
+
+
+def _dragon_atk_state(enemy):
+    """Welche Attack-Teilmenge ist aktiv? "fire" (Strahl brennt),
+    "telegraph" (Maul laedt auf) oder None (Normalflug -> Idle)."""
+    phase = getattr(enemy, "breath_phase", 0)
+    if phase == 2:
+        return "fire"
+    if phase == 1:
+        return "telegraph"
+    return None
+
+
+def _dragon_atk_frame_idx(subset):
+    """Frame-Index INNERHALB der Teilmenge (globale Uhr, wie idle)."""
+    idxs = DRAGON_ATTACK_SUBSETS[subset]
+    return int((pygame.time.get_ticks() / 1000.0) * ANIM_FPS) % len(idxs)
+
+
+# ============================================================
+# AUFTRAG ATTACK2 (Nutzer: "Ich hab ein Sprite erstellt im Pfad
+# ...enemys\\enemy_dragon\\attack2. Das ist der 2. Angriff des
+# Drachen."):
+# Der Drache hat neben dem Atem (attack/-Sheet, Teilmengen Telegraf/
+# Feuer) die ZUSATZ-ANGRIFFE aus pve_system._boss_extra_attack:
+#   atk_kind 2 = GLUTBOMBEN  -> attack2/-Sequenz (das neue Sheet)
+#   atk_kind 3 = EISSPIESSE  -> attack3/-Sequenz, falls vorhanden
+#                               (sonst Idle wie bisher)
+# Die Sequenz laeuft waehrend des Telegrafen und kurz NACH dem Abschuss
+# weiter (Nachlauf-Phase, damit der Wurf nicht hart abschneidet), dann
+# zurueck ins Idle. Kein Eingriff in pve_system: main.py merkt sich
+# selbst, wann ein Zusatz-Angriff zuletzt aktiv war.
+DRAGON_EXTRA_STATES = {2: "attack2", 3: "attack3"}
+DRAGON_EXTRA_LINGER_MS = 450     # Nachlauf nach dem Abschuss (ms)
+_dragon_extra_seen = {}          # id(enemy) -> (ms, atk_kind)
+
+
+def _dragon_extra_state(enemy):
+    """'attack2'/'attack3', waehrend ein ZUSATZ-ANGRIFF (GLUTBOMBEN/
+    EISSPIESSE) telegrafiert - plus kurze Nachlaufzeit nach dem Abschuss.
+    None heisst: kein Zusatz-Angriff im Bild -> Idle/Regelfall."""
+    kind = getattr(enemy, "atk_kind", 0)
+    now = pygame.time.get_ticks()
+    if kind in DRAGON_EXTRA_STATES:
+        _dragon_extra_seen[id(enemy)] = (now, kind)
+    else:
+        seen = _dragon_extra_seen.get(id(enemy))
+        if seen is not None:
+            t0, k0 = seen
+            if now - t0 <= DRAGON_EXTRA_LINGER_MS:
+                kind = k0              # Nachlauf: Wurf fliegt noch weiter
+            else:
+                del _dragon_extra_seen[id(enemy)]
+    state = DRAGON_EXTRA_STATES.get(kind)
+    if state and len(load_enemy_anim("dragon", state)) >= 2:
+        return state
+    return None
+
+
+def _dragon_extra_frame_idx(n_frames):
+    """Frame-Index der Zusatz-Angriffs-Animation (globale Uhr, wie idle)
+    - loopt, bis der Zustand zurueckkehrt."""
+    return int((pygame.time.get_ticks() / 1000.0) * ANIM_FPS) % max(1, n_frames)
+
+
+def _hurt_frame_idx(enemy, n_frames):
+    """AUFTRAG DRACHEN-HURT: Frame-Index der Verletz-Animation. Spielt
+    die Sequenz EINMAL proportional zur Restzeit von e.hurt_t ab
+    (Treffer -> Frame 0, kurz vor Ablauf -> letzter Frame). Kein Loop -
+    der Flinzer endet sauber und der Drache kehrt ins Idle zurueck."""
+    total = max(0.05, float(getattr(pve_sys, "HURT_T_S", 0.72)))
+    t = max(0.0, float(getattr(enemy, "hurt_t", 0.0)))
+    prog = 1.0 - min(1.0, t / total)
+    return max(0, min(n_frames - 1, int(prog * n_frames)))
+
 
 # PAKET 8.8b: SEITENANSICHT-SPRITES. Diese Gegner sind seitlich gezeichnet
 # (Drache: Kopf rechts, Beine unten) und dürfen NICHT gedreht werden -
@@ -423,7 +1301,12 @@ IDLE_PAYOUT_S = 3600
 IDLE_SESSION_CAP_S = 8 * 3600
 
 
-def load_enemy_image(enemy_type):
+def load_enemy_image(enemy_type, state="idle"):
+    # ANIMATION: existiert eine Frame-Sequenz fuer den Zustand, gewinnt
+    # sie gegenueber dem statischen Sprite (Drache: idle/ + attack/).
+    frames = load_enemy_anim(enemy_type, state)
+    if frames:
+        return frames[_enemy_anim_idx(enemy_type, state)]
     if enemy_type in enemy_images:
         return enemy_images[enemy_type]
     path = os.path.join(ENEMY_FOLDER, f"enemy_{enemy_type}.png")
@@ -464,6 +1347,11 @@ def load_enemy_variant(enemy_type, suffix):
     key = (enemy_type, suffix)
     if key in _enemy_variant_images:
         return _enemy_variant_images[key]
+    # IDLE-ANIMATION: laeuft eine Animation, uebernimmt sie ALLE Zustands-
+    # Varianten (auch "Maul zu") - kein Mischbetrieb zwischen neuem
+    # Animations-Look und altem Standbild.
+    if load_enemy_anim(enemy_type):
+        return load_enemy_image(enemy_type)
     path = os.path.join(ENEMY_FOLDER, f"enemy_{enemy_type}{suffix}.png")
     try:
         ref = load_enemy_image(enemy_type)          # Referenz-Hoehe
@@ -506,38 +1394,105 @@ def _boss_glow(col):
     return surf
 
 
-# PAKET 8.8b: FLAMMEN-ATEM (Eisdrache) - Rendering. Der Strahl wird pro
-# Frame in eine wiederverwendete SRCALPHA-Fläche gezeichnet (3 Schichten:
-# rot außen, orange Mitte, gelb-weißer Kern, flackernd) und einmal geblittet.
+# PAKET 8.8b: EIS-ATEM (Eisdrache) - Rendering. AUFTRAG DRACHEN-
+# STRAHL-FIX (Nutzer: "Der Strahl wird ab der Mitte animiert - sieht
+# schlecht aus. Der Strahl vom PNG muesste weitergefuehrt werden."):
+# Der Strahl ist jetzt EIS-BLAU (passt zum Kunstwerk der Attack-
+# Frames), startet GENAU am Maul bzw. setzt am PNG-Strahl-Ende
+# (Frame-Rand) an und wird bis zum Schiff WEITERGEFUEHRT. Ablauf:
+#   1) Polylinie: Maul -> Frame-Rand (im Kunstwerk-Winkel) -> mit
+#      weicher Winkel-Anpassung in die eingefrorene Atem-Richtung
+#   2) 3 Schichten (aussen blau, Mitte hellblau, Kern weiss) mit
+#      Flackern als Polygon-Streifen um die Polylinie
+#   3) additive Eis-Flares an Maul, Uebergang und Einschlag
 _beam_tmp = None
 
 
-def _dragon_mouth_pos(boss, T, s, now_ms):
-    """PAKET 8.8c: Maul-Position des (geflippten) Drachen-Sprites in
-    Screen-px - gemeinsame Basis fuer Atem, GLUTBOMBEN-Telegraf und
-    Bomben-Abschuss-Optik. Der Drache schaut immer zum Schiff (links)."""
+def _dragon_sprite_geom(boss, T, s, now_ms, ship_x):
+    """Gemeinsame Geometrie fuer Maul-Glow und Strahl (Screen-px):
+    (maul, rand, art_ang, img_w, img_h). Der Drache schaut immer zum
+    Schiff -> horizontal gespiegelt (enemy_rotated); die gemessenen
+    Anker folgen dem Spiegel-Flag. Der zeichnerische Bob ist identisch
+    zur Gegner-Schleife (Boss-Schweben), damit Maul/Strahl am Sprite
+    kleben."""
     bx, by = T(boss.x, boss.y)
-    dimg = load_enemy_image("dragon")
+    by += math.sin(now_ms * 0.0021 + boss.x * 0.13) * 4.0 * s   # Bob wie Draw
+    flipped = ship_x < boss.x
+    frames = load_enemy_anim("dragon", "attack")
+    atk = _dragon_atk_state(boss)
+    if atk and frames:
+        dimg = frames[0]
+        mfx, mfy = DRAGON_ATK_MOUTH_FRAC
+    else:
+        dimg = load_enemy_image("dragon")
+        mfx, mfy = (DRAGON_IDLE_MOUTH_FRAC if load_enemy_anim("dragon")
+                    else DRAGON_STATIC_MOUTH_FRAC)
     img_w = dimg.get_width() * s
     img_h = dimg.get_height() * s
-    by += math.sin(now_ms * 0.0021 + boss.x * 0.13) * 4.0 * s   # Bob wie im Draw
-    mx = bx - img_w * 0.44
-    my = by + img_h * 0.06
-    return mx, my, img_w, img_h
+    fx = 1.0 - mfx if flipped else mfx
+    maul = (bx + (fx - 0.5) * img_w, by + (mfy - 0.5) * img_h)
+    # PNG-Strahl-Ende am Frame-Rand (nur mit Attack-Frames existent)
+    rand = (bx + (-0.5 if flipped else 0.5) * img_w,
+            by + (DRAGON_ATK_EDGE_Y_FRAC - 0.5) * img_h)
+    # Kunstwerk-Winkel: ungespiegelt zeigt der Strahl leicht nach
+    # OBEN rechts (-tilt); gespiegelt links leicht nach oben.
+    art_ang = ((math.pi + DRAGON_ATK_ART_TILT) if flipped
+               else -DRAGON_ATK_ART_TILT)
+    return maul, rand, art_ang, img_w, img_h
+
+
+def _dragon_mouth_pos(boss, T, s, now_ms, ship_x=None):
+    """Maul-Position des (geflippten) Drachen-Sprites in Screen-px -
+    gemeinsame Basis fuer Atem-Telegraf, GLUTBOMBEN-Telegraf und
+    Bomben-Abschuss-Optik. GEMESSENE Anker statt der alten 44 %-
+    Pauschale, die den Effekt "ab der Mitte" verursachte. Ohne Schiff-
+    Info (ship_x=None) gilt die Normal-Situation "Schiff links vom
+    Drachen" -> gespiegelt (wie beim alten Renderer)."""
+    maul, _rand, _art, img_w, img_h = _dragon_sprite_geom(
+        boss, T, s, now_ms,
+        (-1e9 if ship_x is None else ship_x))   # -1e9 -> immer gespiegelt
+    return maul[0], maul[1], img_w, img_h
+
+
+def _beam_strip(pts, half_w, taper=0.80):
+    """Polygon-Streifen um eine Polylinie (Strahlkoerper): an der
+    Wurzel schmal anlaufend (Maul), in der Mitte voll, am Ende auf
+    `taper` verjuengt. Punkte in Screen-px."""
+    n = len(pts)
+    if n < 2:
+        return [(pts[0][0] - half_w, pts[0][1]),
+                (pts[0][0] + half_w, pts[0][1])]
+    links, rechts = [], []
+    for i, (x, y) in enumerate(pts):
+        if i == 0:
+            dx_, dy_ = pts[1][0] - x, pts[1][1] - y
+        else:
+            dx_, dy_ = x - pts[i - 1][0], y - pts[i - 1][1]
+        L = math.hypot(dx_, dy_) or 1.0
+        nx_, ny_ = -dy_ / L, dx_ / L
+        # Breiten-Profil: Mund 0.55 -> voll (ab Punkt 2) -> taper am Ende
+        w_in = half_w * (0.55 + 0.45 * min(1.0, i / 2.0))
+        w_out = w_in * (1.0 - (1.0 - taper) * (i / max(1, n - 1)))
+        links.append((x + nx_ * w_out, y + ny_ * w_out))
+        rechts.append((x - nx_ * w_out, y - ny_ * w_out))
+    return links + rechts[::-1]
 
 
 def _draw_dragon_breath(surface, boss, T, s, ship_x, ship_y, now_ms):
-    """Zeichnet Telegraf (Mund glimmt + flackernde Ziellinie) und den
-    brennenden Strahl des Eisdrachen. Pure Optik - Schaden/Logik liegen
-    in pve_system._dragon_breath."""
+    """Zeichnet Telegraf (Maul laedt Eis auf + flackernde Ziellinie)
+    und den brennenden Eis-Strahl, der den PNG-Strahl der Attack-
+    Frames am Frame-Rand WEITERFUEHRT bis zum Schiff. Pure Optik -
+    Schaden/Logik liegen in pve_system._dragon_breath."""
     global _beam_tmp
-    mx, my, img_w, img_h = _dragon_mouth_pos(boss, T, s, now_ms)
+    maul, rand, art_ang, img_w, img_h = _dragon_sprite_geom(
+        boss, T, s, now_ms, ship_x)
+    mx, my = maul
 
     if boss.breath_phase == 1:
-        # --- TELEGRAF: aufglühender Mund + flackernde Ziellinie ---
+        # --- TELEGRAF: Eis glimmt im Maul auf + flackernde Ziellinie ---
         prog = 1.0 - max(0.0, boss.breath_t) / pve_sys.BREATH_TELEGRAPH_S
         ang = math.atan2(ship_y - boss.y, ship_x - boss.x)
-        glow = _boss_glow((255, 120, 40))
+        glow = _boss_glow((150, 205, 255))
         gr = int(u(10) + prog * u(26) + 2 * math.sin(now_ms * 0.03))
         if gr > 6:
             gs = pygame.transform.smoothscale(glow, (gr, gr))
@@ -547,43 +1502,80 @@ def _draw_dragon_breath(surface, boss, T, s, ship_x, ship_y, now_ms):
         if math.sin(now_ms * 0.021) > -0.55:
             ex_ = mx + math.cos(ang) * u(210)
             ey_ = my + math.sin(ang) * u(210)
-            pygame.draw.line(surface, (200, 70, 30),
+            pygame.draw.line(surface, (150, 200, 255),
                              (int(mx), int(my)), (int(ex_), int(ey_)), 2)
         return
 
-    # --- STRAHL AKTIV ---
+    # --- STRAHL AKTIV: PNG-Strahl weiterfuehren ---
     ang = boss.breath_ang
     rage = getattr(boss, "enraged", False)
-    length = pve_sys.BREATH_RANGE * s
-    ex_ = mx + math.cos(ang) * length
-    ey_ = my + math.sin(ang) * length
-    w_end = (30 if rage else 24) * s
-    px_, py_ = -math.sin(ang), math.cos(ang)          # Senkrechte
+    use_png = (bool(_dragon_atk_state(boss))
+               and bool(load_enemy_anim("dragon", "attack")))
+    # Endpunkt wie die Schadens-Logik (Boss-Mitte + BREATH_RANGE in
+    # Atem-Richtung), visuell aber am Schiff "aufgesetzt" (+45 px
+    # Aufschlag), damit der Strahl IM Schiff endet und nicht 200 px
+    # dahinter ins Leere brennt.
+    dist_ship = math.hypot(ship_x - boss.x, ship_y - boss.y)
+    reach = min(pve_sys.BREATH_RANGE, dist_ship + 45.0)
+    ex_, ey_ = T(boss.x + math.cos(ang) * reach,
+                 boss.y + math.sin(ang) * reach)
+    pts = [(mx, my)]
+    if use_png:
+        # 1) genau durch das PNG-Strahl-Ende (Frame-Rand),
+        # 2) weicher Winkel-Uebergang Kunstwerk -> Atem-Richtung
+        pts.append(rand)
+        rx, ry = rand
+        rest = math.hypot(ex_ - rx, ey_ - ry) or 1.0
+        blend = min(70.0 * s, rest * 0.30)
+        nx_ = (math.cos(art_ang) + (ex_ - rx) / rest) * 0.5
+        ny_ = (math.sin(art_ang) + (ey_ - ry) / rest) * 0.5
+        nl = math.hypot(nx_, ny_) or 1.0
+        pts.append((rx + nx_ / nl * blend, ry + ny_ / nl * blend))
+    pts.append((ex_, ey_))
+
     W, H = surface.get_size()
     if _beam_tmp is None or _beam_tmp.get_size() != (W, H):
         _beam_tmp = pygame.Surface((W, H), pygame.SRCALPHA)
     _beam_tmp.fill((0, 0, 0, 0))
-    layers = (((255, 60, 20), 60, 1.30),
-              ((255, 145, 35), 130, 0.82),
-              ((255, 235, 170), 225, 0.44))
+    # Halbbreite am Ansatz = GEMESSENE PNG-Strahlbreite am Frame-Rand
+    w0 = DRAGON_ATK_HALFW_FRAC * img_h if use_png else 7.0 * s
+    # EIS-FARBEN (Kunstwerk: weisser Kern, hellblauer Mantel, blauer
+    # Schein) - vorher Feuer-Rot/Orange, das zum Eisdrachen passte wie
+    # eine Dampfheizung zum Igloo.
+    layers = (((80, 140, 225), 62, 3.30),
+              ((150, 205, 255), 135, 1.95),
+              ((238, 248, 255), 235, 1.00))
     for i, (col, alpha, wm) in enumerate(layers):
-        wf = w_end * wm * (0.84 + 0.16 * math.sin(now_ms * 0.031 + i * 2.1))
-        jx = math.sin(now_ms * 0.017 + i) * 3.0 * s
-        jy = math.cos(now_ms * 0.019 + i * 1.3) * 3.0 * s
-        tex, tey = ex_ + jx, ey_ + jy
-        pygame.draw.polygon(_beam_tmp,
-                            (col[0], col[1], col[2], alpha),
-                            [(mx, my),
-                             (tex + px_ * wf, tey + py_ * wf),
-                             (tex - px_ * wf, tey - py_ * wf)])
-        pygame.draw.circle(_beam_tmp, (col[0], col[1], col[2], alpha),
-                           (int(tex), int(tey)), max(3, int(wf * 0.55)))
+        wf = w0 * wm * (0.86 + 0.14 * math.sin(now_ms * 0.031 + i * 2.1))
+        if rage:
+            wf *= 1.22
+        pygame.draw.polygon(_beam_tmp, (col[0], col[1], col[2], alpha),
+                            _beam_strip(pts, wf))
+    # abgerundete Strahlspitze am Einschlag
+    pygame.draw.circle(_beam_tmp, (238, 248, 255, 235),
+                       (int(ex_), int(ey_)), max(3, int(w0)))
     surface.blit(_beam_tmp, (0, 0))
-    # Mund-Feuer (additiv) + heißer Kern nochmal drüber
-    glow = _boss_glow((255, 160, 50))
-    gr = int(u(22) + 3 * math.sin(now_ms * 0.028))
+
+    # Maul-Flare (additiv): Strahl "klebt" optisch am Kunstwerk-Maul
+    glow = _boss_glow((170, 215, 255))
+    gr = int(u(21) + 3 * math.sin(now_ms * 0.028))
     gs = pygame.transform.smoothscale(glow, (gr, gr))
     surface.blit(gs, gs.get_rect(center=(int(mx), int(my))),
+                 special_flags=pygame.BLEND_ADD)
+    if use_png:
+        # Uebergangs-Flare am Frame-Rand: kaschiert den Knick zwischen
+        # Kunstwerk-Steigung und eingefrorener Atem-Richtung (bewusst
+        # kleiner als das Maul-Flare -> wirkt wie ein Energie-Knoten,
+        # nicht wie eine zweite Kugel)
+        gr2 = int(u(11) + 2 * math.sin(now_ms * 0.033))
+        gs2 = pygame.transform.smoothscale(glow, (gr2, gr2))
+        surface.blit(gs2, gs2.get_rect(center=(int(rand[0]), int(rand[1]))),
+                     special_flags=pygame.BLEND_ADD)
+    # Eisiger Einschlag am Schiff
+    glow_i = _boss_glow((190, 225, 255))
+    gri = int(u(30) + 4 * math.sin(now_ms * 0.037))
+    gsi = pygame.transform.smoothscale(glow_i, (gri, gri))
+    surface.blit(gsi, gsi.get_rect(center=(int(ex_), int(ey_))),
                  special_flags=pygame.BLEND_ADD)
 
 
@@ -598,7 +1590,7 @@ def _boss_bomb_pos(b, k):
     return wx, wy
 
 
-def _draw_boss_attacks(surface, combat, T, s, now_ms):
+def _draw_boss_attacks(surface, combat, T, s, now_ms, ship_x=None):
     for enemy in combat.enemies:
         if not enemy.is_boss:
             continue
@@ -606,7 +1598,8 @@ def _draw_boss_attacks(surface, combat, T, s, now_ms):
         if enemy.atk_kind == 2 and enemy.atk_t > 0 and (enemy.bomb_marks or []):
             prog = 1.0 - max(0.0, enemy.atk_t) / pve_sys.BOMB_TELEGRAPH_S
             if enemy.enemy_type == "dragon":
-                mx, my, _, _ = _dragon_mouth_pos(enemy, T, s, now_ms)
+                mx, my, _, _ = _dragon_mouth_pos(enemy, T, s, now_ms,
+                                                 ship_x=ship_x)
             else:
                 mx, my = T(enemy.x, enemy.y)
             glow = _boss_glow((255, 120, 40))
@@ -2072,7 +3065,8 @@ class Game:
                 if oid and oid.startswith("sector_"):
                     sec = int(oid.split("_")[1])
                     if sec <= self.modules.highest_campaign:
-                        self._map_deselect()
+                        # NEU: Auswahl bleibt bestehen - der Planet bleibt
+                        # hinter dem Stufen-Sheet angehoben stehen.
                         self.selected_sector = sec
             elif bid == "map_primary":
                 self._map_action()
@@ -2263,24 +3257,41 @@ class Game:
 
     # ---------------- PAKET 7A: Galaxiekarten-Logik ----------------
     def _map_select(self, oid):
-        """Kartenobjekt auswaehlen.
-        AUFTRAG 17: ZWEI-KLICK-PRINZIP.
-          1. Klick  : Planet wird hervorgehoben (Highlight + Info-Panel) -
-                      KEIN Zoom. Noch ein Klick woanders waehlt um.
-          2. Klick  : Zoom auf den Planeten + grosses Detail (PAKET-7F-
-                      Szene). Rueckkehr zur normalen Karte wie bisher ueber
-                      den Schliessen-Button der Szene (bzw. Android-Zurueck).
-        Bestehende Funktionen (Panel-Aktionen, Feindsignale, Start) bleiben
-        unveraendert - sie wirken auf die SELEKTION, nicht auf den Zoom."""
+        """Kartenobjekt auswaehlen - NUTZER-FASSUNG (ueberarbeitet):
+          1. Klick  : Das Gebiet HEBT SICH HERVOR (Planet loest sich
+                      sichtbar aus der Karte, Umgebung dunkelt leicht
+                      ab, Info-Panel + Hinweis-Chip). Die Karte bleibt
+                      VOLL ersichtlich. Klick woanders waehlt um.
+          2. Klick  : SEKTOR -> STUFENANSICHT: das bekannte Stufen-Sheet
+                      oeffnet UEBER der Karte; Auswahl + Anhebung
+                      bleiben sichtbar. Gesperrte Sektoren melden die
+                      Sperre. SIGNALE -> Detail-Szene (Zoom) wie
+                      bisher (PAKET-7F-Szene).
+        Panel-Aktionen (KAMPF STARTEN / STUFEN) wirken weiter auf die
+        Selektion - der Direkteinstieg ueber die Buttons bleibt."""
         if oid != self.map_sel:
             SFX.play("click", 0.4)
             self.map_sel = oid
             self.gmap.select(oid)
             return                       # 1. Klick: nur hervorheben
         obj = world_map.BY_ID.get(oid)
-        if obj and not self.map_scene.active:
+        if not obj:
+            return
+        if oid.startswith("sector_"):
+            sec = int(oid.split("_")[1])
+            if sec > self.modules.highest_campaign:
+                # Gleiche Sperr-FRUEHWARNUNG wie _map_action
+                self.show_message(
+                    f"SEKTOR {sec} GESPERRT  \u00b7  schliesse erst Sektor "
+                    f"{sec - 1} (Stufe 15) ab")
+                return
             SFX.play("click", 0.4)
-            self.map_scene.open(oid, obj["uv"])   # 2. Klick: Zoom + Detail
+            # 2. Klick: STUFENANSICHT. Bewusst KEIN _map_deselect() -
+            # der Planet bleibt hinter dem Sheet angehoben stehen.
+            self.selected_sector = sec
+        elif not self.map_scene.active:
+            SFX.play("click", 0.4)
+            self.map_scene.open(oid, obj["uv"])   # Signale: Zoom + Detail
 
     def _map_deselect(self):
         if self.map_sel:
@@ -2375,6 +3386,7 @@ class Game:
                 "status": st["status"], "status_col": st.get("status_col", WHITE),
                 "progress": st.get("progress"), "lines": list(st.get("lines", [])),
                 "primary": None, "second": None, "progress_text": None,
+                "hint": None,
                 "tag": loc.get("kind", ""), "story": "", "battles": []}
         if oid.startswith("sector_"):
             sec = int(oid.split("_")[1])
@@ -2391,6 +3403,8 @@ class Game:
                 stage = mods.highest_stage if sec == mods.highest_campaign else 15
                 info["primary"] = ("KAMPF STARTEN", st.get("col", CYAN), True)
                 info["second"] = ("STUFEN", VIOLET, True)
+                # NUTZER-FLOW: der Hinweis-Chip erklaert den 2. Klick
+                info["hint"] = "NOCHMAL ANTIPPEN \u00b7 STUFEN \u00d6FFNEN"
                 info["lines"] = [f"Naechster Einsatz: Stufe {stage}"]
                 # PAKET 7F: verfuegbare Kaempfe (Kampagnensystem unveraendert)
                 battles = [{"label": f"STUFE {stage}", "note": "N\u00c4CHSTER EINSATZ",
@@ -2412,6 +3426,7 @@ class Game:
                 info["battles"] = battles[:4]
         elif oid == "signal_a":
             info["primary"] = ("EINSATZ STARTEN", GREEN, True)
+            info["hint"] = "NOCHMAL ANTIPPEN \u00b7 EINSATZ-DETAILS"
             info["story"] = ("Feindlicher Verband im Anmarsch - abfangen, "
                              "bevor er den Sektor erreicht.")
             info["lines"] = [f"Naechster Einsatz: Sektor {mods.highest_campaign} \u00b7 "
@@ -2423,6 +3438,7 @@ class Game:
         elif oid == "signal_b":
             if mods.highest_stage >= 15:
                 info["primary"] = ("BOSS-ANGRIFF", AMBER, True)
+                info["hint"] = "NOCHMAL ANTIPPEN \u00b7 BOSS-DETAILS"
                 info["story"] = "Das Flaggschiff des Sektors wartet."
                 info["lines"] = [f"Sektor {mods.highest_campaign} \u00b7 Stufe 15",
                                  "Das Flaggschiff des Sektors wartet."]
@@ -3166,9 +4182,11 @@ class Game:
         self.upgrade_fx.draw(SCREEN)
 
     def draw_stages(self):
-        """PAKET 7A/7F: bg_world.jpg als interaktive Karte (world_map.py);
-        Antippen startet Zoom + Orts-Szenerie (map_locations.py). Das
-        Stufen-Sheet legt sich weiterhin darueber."""
+        """PAKET 7A/7F: bg_world.jpg als interaktive Karte (world_map.py).
+        NUTZER-FLOW: 1. Klick hebt das Gebiet hervor (Karte bleibt voll
+        sichtbar), 2. Klick oeffnet die STUFENANSICHT (Stufen-Sheet
+        ueber der Karte); Signale oeffnen weiter die Zoom-Szene
+        (map_locations.py)."""
         W, H = ui_kit.W, ui_kit.H
         states = self._map_states()
         if self.map_scene.active:
@@ -3513,18 +4531,85 @@ class Game:
             # Normalflug, OFFEN nur beim Angriff (Atem-Telegraf/Strahl,
             # Bomben-/Spiess-Telegraf). Der breath_phase-Check ist das
             # Sicherheitsnetz, falls mouth_open fehlt.
-            if enemy.enemy_type == "dragon":
+            if enemy.enemy_type == "dragon" and (
+                    load_enemy_anim("dragon")
+                    or load_enemy_anim("dragon", "attack")
+                    or load_enemy_anim("dragon", "attack2")
+                    or load_enemy_anim("dragon", "hurt")):
+                # DRACHEN-ANIMATIONEN (Pfade wie im Repo):
+                #   Normalflug    -> idle/enemy_dragon_idle_<n>.png
+                #   Telegraf      -> attack-Frames 0-1 (Maul laedt auf)
+                #   Strahl aktiv  -> attack-Frames 2-5 (PNG-Strahl brennt)
+                #   GLUTBOMBEN    -> attack2-Sequenz (2. Angriff, Sheet
+                #                    in attack2/ - wird automatisch in
+                #                    Frames zerlegt), kurz nach dem Wurf
+                #                    nachlaufend, dann zurueck ins Idle
+                #   EISSPIESSE    -> attack3-Sequenz, falls vorhanden
+                #   Schaden       -> hurt-Sequenz (Sheet in hurt/ - wird
+                #                    automatisch in Frames zerlegt),
+                #                    spielt EINMAL durch, dann zurueck
+                #                    ins Idle. Nur im Normalflug -
+                #                  waehrend Telegraf/Strahl bleibt es
+                #                    beim Attack-Sprite (der Strahl
+                #                    haengt geometrisch daran).
+                # ALLE Zustaende sind auf die GLEICHE SICHTBARE Hoehe
+                # skaliert -> der Drache schrumpft nirgends (ATTACK2).
+                # AUFTRAG STRAHL-FIX: Teilmengen statt des vollen 8er-
+                # Loops - vorher "blinzelte" der eingebaute PNG-Strahl
+                # 8x pro Sekunde und lief schon im Telegraf. Beide
+                # Zustaende sind auf die GLEICHE Frame-Hoehe skaliert
+                # -> kein Groessen-Sprung beim Wechsel. Cache-Key MIT
+                # Teilmenge + Frame-Index, sonst friert der _scaled-
+                # Cache den ersten Frame ein.
+                _sub = _dragon_atk_state(enemy)
+                _frames_atk = load_enemy_anim("dragon", "attack")
+                _frames_hurt = load_enemy_anim("dragon", "hurt")
+                if _sub and _frames_atk:
+                    _fi = _dragon_atk_frame_idx(_sub)
+                    img0 = _frames_atk[DRAGON_ATTACK_SUBSETS[_sub][_fi]]
+                    ckey = f"dragon#{_sub}#{_fi}"
+                elif getattr(enemy, "hurt_t", 0.0) > 0.0 and _frames_hurt:
+                    _fi = _hurt_frame_idx(enemy, len(_frames_hurt))
+                    img0 = _frames_hurt[_fi]
+                    ckey = f"dragon#hurt#{_fi}"
+                else:
+                    # AUFTRAG ATTACK2: 2. (und 3.) Angriff - ZUSATZ-
+                    # ANGRIFFE zeigen ihre eigene Sequenz statt Idle.
+                    _ex = _dragon_extra_state(enemy)
+                    _fr_x = load_enemy_anim("dragon", _ex) if _ex else []
+                    if _ex and len(_fr_x) >= 2:
+                        _fi = _dragon_extra_frame_idx(len(_fr_x))
+                        img0 = _fr_x[_fi]
+                        ckey = f"dragon#{_ex}#{_fi}"
+                    else:
+                        img0 = load_enemy_image("dragon")
+                        ckey = _enemy_ckey("dragon")
+            elif enemy.enemy_type == "dragon":
+                _fr_hurt = load_enemy_anim("dragon", "hurt")
                 maw = (getattr(enemy, "mouth_open", False)
                        or getattr(enemy, "breath_phase", 0) > 0)
-                if maw:
+                if getattr(enemy, "hurt_t", 0.0) > 0.0 and _fr_hurt \
+                        and not maw:
+                    _fi = _hurt_frame_idx(enemy, len(_fr_hurt))
+                    img0 = _fr_hurt[_fi]
+                    ckey = f"dragon#hurt#{_fi}"
+                elif maw:
                     img0 = load_enemy_image("dragon")
                     ckey = enemy.enemy_type
                 else:
                     img0 = load_enemy_variant("dragon", "_closed")
                     ckey = "dragon_closed"   # eigener Cache-Key!
             else:
-                img0 = load_enemy_image(enemy.enemy_type)
-                ckey = enemy.enemy_type
+                # AUFTRAG DRACHEN-HURT: gilt GENERISCH - jeder Typ mit
+                # einer hurt-Sequenz (Ordner/Sheet) flinzt bei Schaden.
+                _fr_hurt = load_enemy_anim(enemy.enemy_type, "hurt")
+                if getattr(enemy, "hurt_t", 0.0) > 0.0 and _fr_hurt:
+                    _fi = _hurt_frame_idx(enemy, len(_fr_hurt))
+                    img0 = _fr_hurt[_fi]
+                    ckey = f"{enemy.enemy_type}#hurt#{_fi}"
+                else:
+                    img0 = load_enemy_image(enemy.enemy_type)
+                    ckey = _enemy_ckey(enemy.enemy_type)
             img = _scaled(_enemy_scaled, ckey, img0, s)
             # AUFTRAG 15 (2. DURCHLAUF): Ausrichtung zentral über
             # enemy_rotated() - Nase jedes Gegnertyps zeigt zum Schiff,
@@ -3612,7 +4697,7 @@ class Game:
             _draw_dragon_breath(SCREEN, _db, T, s, ship_x, ship_y, _now_ms)
         # PAKET 8.8c: Zusatz-Angriffe (GLUTBOMBEN / EISSPIESSE) rendern -
         # ebenfalls nach der Gegner-Schleife, ueber dem Hintergrund.
-        _draw_boss_attacks(SCREEN, combat, T, s, _now_ms)
+        _draw_boss_attacks(SCREEN, combat, T, s, _now_ms, ship_x=ship_x)
 
         target = min(combat.enemies, key=lambda e: e.x) if combat.enemies else None
         # PAKET 7E: Der Geschuetzturm zeigt jetzt die WAFFEN-Stufe (Modul
