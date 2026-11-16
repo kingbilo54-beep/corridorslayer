@@ -1717,6 +1717,99 @@ def load_module_image(module_key, level):
         return surf
 
 
+# PAKET 9.0: ECHTE WERFT-MODULGRAFIKEN (transparente PNG-Overlays).
+# Radar besitzt explizite rada_lvl_N-Dateinamen. Antrieb, Drohnen und
+# Hangar enthalten je 12 Bildvarianten: ohne Suffix = Level 1,
+# (1) = Level 2 ... (11) = Level 12.
+_WERFT_ASSET_DIRS = {
+    "radar": "radar",
+    "antrieb": "antrieb",
+    "drohnen": "drohnen",
+    "hangar": "hangar",
+}
+_werft_asset_cache = {}
+
+
+def _werft_asset_path(key, level):
+    folder_name = _WERFT_ASSET_DIRS.get(key)
+    if not folder_name:
+        return None
+    folder = os.path.join(_BASE, folder_name)
+    try:
+        names = [n for n in os.listdir(folder) if n.lower().endswith(".png")]
+    except OSError as e:
+        _log.warning("Werft-Assetordner nicht lesbar (%s): %s", folder, e)
+        return None
+
+    lvl = max(1, int(level))
+    if key == "radar":
+        # Die Radarreihe ist explizit nummeriert und reicht aktuell bis L14.
+        for candidate in range(lvl, 0, -1):
+            path = os.path.join(folder, f"rada_lvl_{candidate}.png")
+            if os.path.isfile(path):
+                return path
+        return None
+
+    ranked = []
+    for name in names:
+        stem = name[:-4]
+        rank = 1
+        if stem.endswith(")") and "(" in stem:
+            suffix = stem.rsplit("(", 1)[1][:-1]
+            if suffix.isdigit():
+                rank = int(suffix) + 1
+        ranked.append((rank, name))
+    ranked.sort(key=lambda item: (item[0], item[1].lower()))
+    if not ranked:
+        return None
+    # Fehlende hohe Stufen verwenden die hoechste vorhandene Grafik.
+    wanted = min(lvl, len(ranked))
+    for rank, name in ranked:
+        if rank == wanted:
+            return os.path.join(folder, name)
+    return os.path.join(folder, ranked[-1][1])
+
+
+def load_werft_asset(key, level):
+    """Laedt eine transparente Modul-Grafik und cached sie unskaliert."""
+    path = _werft_asset_path(key, level)
+    if path is None:
+        return None
+    cache_key = (key, os.path.basename(path))
+    if cache_key in _werft_asset_cache:
+        return _werft_asset_cache[cache_key]
+    try:
+        raw = pygame.image.load(path).convert_alpha()
+        bounds = raw.get_bounding_rect(min_alpha=8)
+        if bounds.width <= 0 or bounds.height <= 0:
+            return None
+        image = pygame.Surface((bounds.width, bounds.height), pygame.SRCALPHA)
+        image.blit(raw, (0, 0), bounds)
+        _werft_asset_cache[cache_key] = image
+        return image
+    except Exception as e:
+        _log.warning("Werft-Grafik konnte nicht geladen werden (%s): %s", path, e)
+        return None
+
+
+def _draw_werft_asset(surface, key, level, center, max_w, max_h, alpha=None):
+    """Skaliert ein Modul proportional in einen maximalen Zielrahmen."""
+    image = load_werft_asset(key, level)
+    if image is None:
+        return False
+    iw, ih = image.get_size()
+    scale = min(float(max_w) / max(1, iw), float(max_h) / max(1, ih))
+    if scale <= 0:
+        return False
+    size = (max(1, int(iw * scale)), max(1, int(ih * scale)))
+    rendered = pygame.transform.smoothscale(image, size)
+    if alpha is not None:
+        rendered.set_alpha(max(0, min(255, int(alpha))))
+    surface.blit(rendered, rendered.get_rect(center=(int(center[0]), int(center[1]))))
+    return True
+
+
+
 # PAKET 7E: Verfuegbare Kanonen-Bildstufen im Ordner (1x scannen, cachen).
 _kan_avail_cache = {}
 
@@ -4087,19 +4180,35 @@ class Game:
             self.fortress.x, self.fortress.y = ship_draw.center
             self.fortress.draw(SCREEN)
             self.fortress.x, self.fortress.y = ox, oy
-        # --- PAKET 7C: Drohnen-Vorschau - der Hangar-Zustand ist VOR dem
-        # Gefecht am Schiff sichtbar (Anzahl + Formation je Stufe) ---
+        # --- PAKET 9.0: Modul-Grafiken direkt auf/um das Schiff legen ---
+        # Positionen stammen aus SHIP_HOTSPOTS und bleiben damit deckungsgleich
+        # mit den vorhandenen Touch-Hotspots. Die Assets sind transparente PNGs.
+        hs_draw = self._werft_hotspots()
+        for asset_key, width_factor, height_factor in (
+                ("antrieb", 0.30, 0.48),
+                ("radar", 0.22, 0.52),
+                ("hangar", 0.30, 0.52)):
+            anchor = hs_draw.get(asset_key)
+            if anchor:
+                _draw_werft_asset(
+                    SCREEN, asset_key, self.modules.get(asset_key).level,
+                    (anchor[0] + shx, anchor[1] + shy),
+                    ship.w * width_factor, ship.h * height_factor)
+
+        # Echte Drohnen-Grafik als Vorschau um das Schiff herum.
         hang_l = self.modules.get("hangar").level
         extra_d = int(self.skills.modifiers().get("extra_drones", 0)) \
             if hasattr(self, "skills") else 0
         if hang_l > 1:
             n_prev = min(6, hang_l - 1 + extra_d)
+            drone_level = min(hang_l, 12)
             for i in range(n_prev):
                 orb = self.elapsed * 0.7 + i * (math.tau / n_prev)
-                dx = ship.centerx + int(math.cos(orb) * ship.w * 0.58)
-                dy = ship.centery - u(6) + int(math.sin(orb) * ship.h * 0.82)
-                _draw_drone_sprite(SCREEN, dx, dy, orb + math.pi / 2,
-                                   scale=1.0, ghost=True, level=hang_l)
+                dx = ship.centerx + int(math.cos(orb) * ship.w * 0.60) + shx
+                dy = ship.centery - u(6) + int(math.sin(orb) * ship.h * 0.82) + shy
+                _draw_werft_asset(
+                    SCREEN, "drohnen", drone_level, (dx, dy),
+                    ship.w * 0.15, ship.h * 0.30, alpha=205)
         text(SCREEN, "MODULE ANTIPPEN ODER CHIP-LEISTE NUTZEN", F(8), MUTED,
              (stage.centerx, stage.y + u(7)), "midtop")
         # --- PAKET 7E: Schiffs-Stufe + Aufwertung (das Schiff SELBST) ---
