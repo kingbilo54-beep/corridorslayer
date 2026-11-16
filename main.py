@@ -4449,6 +4449,18 @@ class Game:
                       (W - m, m + u(2)), "topright")
             neon_text(SCREEN, f"GESAMT: {self.modules.credits + combat.credits:,} Cr", F(10),
                       MUTED, (W - m, m + u(24)), "topright")
+            # Transparente, dynamische Ertragsrate aus derselben Formel
+            # wie der Live-Kill-Ertrag (kein statischer Beispielwert).
+            idle_mods = self.skills.modifiers() if hasattr(self, "skills") else {}
+            idle_pct = float(idle_mods.get("idle_pct", 0.0))
+            ng = int(getattr(self.modules, "ng_plus", 0) or 0)
+            nominal = pve_sys.stage_nominal_reward(
+                self.modules.highest_stage, self.modules.ship_level,
+                self.modules.highest_campaign) * rpg_config.ng_reward_mult(ng)
+            credits_per_hour = nominal * rpg_config.IDLE_KPS * (1.0 + idle_pct) \\
+                * rpg_config.BAL_CREDITS * rpg_config.BAL_IDLE_CREDITS * 3600.0
+            neon_text(SCREEN, f"ERTRAG: {int(credits_per_hour):,} Cr / STUNDE",
+                      F(10), GREEN, (W - m, m + u(64)), "topright")
             # PAKET 8.8b: Stundenlohn-Rhythmus + 8h-Maximum sichtbar
             if getattr(self.idle_combat, "income_frozen", False):
                 neon_text(SCREEN, "MAXIMUM ERREICHT (8 H)", F(10), RED,
