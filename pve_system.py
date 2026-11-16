@@ -823,6 +823,8 @@ class PvECombat:
         # PAKET 8.8b: IDLE-MAXIMUM - main.py friert das Idle-Einkommen ein,
         # sobald die Idle-Sitzung 8 h erreicht hat (AFK-Profit-Bremse).
         self.income_frozen = False
+        # PAKET 9.2: 2-h-Anlaufphase ohne Credits oder Data Cores.
+        self.income_delay_remaining_s = 0.0
         # AUFTRAG 22: Live-Idle-Cores je FENSTER deckeln (wie der Offline-
         # Bericht: IDLE_LIVE_CORE_CAP). main.py spiegelt den Zaehler in den
         # Spielstand (Neustart-resistent) und setzt ihn beim Laden zurueck.
@@ -1916,7 +1918,8 @@ class PvECombat:
         # eingefroren hat (8 h Idle erreicht), gibt es hier NICHTS
         # mehr (keine Credits, keine Cores); Abschuesse/Quests
         # zaehlen weiter.
-        frozen = self.is_idle and self.income_frozen
+        frozen = self.is_idle and (self.income_frozen
+                                   or self.income_delay_remaining_s > 0.0)
         gain_mult = 0.0 if frozen else \
             (1.0 + self.mod("idle_pct", 0.0)) if self.is_idle else (1.0 + self.mod("credit_pct", 0.0))
         if not frozen:
