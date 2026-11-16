@@ -3160,15 +3160,8 @@ class Game:
             return
 
         if st == self.DEFEAT:
-            # PAKET 8.7: Skip waehrend des Videos.
-            # PAKET 8.8a: danach keine Buttons mehr - TAP irgendwo =
-            # Stufe neu starten (zum Hauptmenue: im Gefecht Pause ->
-            # "ZUM HAUPTMENÜ").
-            if bid == "def_skip":
-                if self.defeat_frames:
-                    self.defeat_timer = len(self.defeat_frames) / 30.0
-            elif bid == "def_tap":
-                self._restart_stage()
+            # Defeat bleibt ein reiner Endbildschirm: keine Skip- oder
+            # Neustart-Aktion per Tap.
             return
 
         if st in (self.STAGE_CLEAR, self.VICTORY):   # AUFTRAG 6: gleiche Buttons
@@ -3839,29 +3832,9 @@ class Game:
         return ui
 
     def _layout_defeat(self):
-        """PAKET 8.7: Waehrend des Videos ist der ganze Screen der
-        unsichtbare Skip.
-        PAKET 8.8a (Nutzerwunsch "die zusaetzlichen Buttons weg"):
-        Nach dem Video KEINE Buttons mehr - ein TAP irgendwo startet die
-        Stufe neu.
-        PAKET 8.8b: Der End-VORHANG ist wieder hoeher (u(124) statt
-        u(96)) und mit Verlaufskante - die in die Defeat-Animation
-        eingebrannten {R}-NEUSTART/HAUPTMENUE-Buttons guckten oben wieder
-        heraus (Nutzer: "Es kommt wieder ein pop up"). Zusätzlich wird
-        das Video per cover-fit auf den ganzen Screen skaliert, sodass
-        die eingebrannten Buttons IMMER am unteren Rand liegen."""
-        W, H = ui_kit.W, ui_kit.H
-        ui = {}
-        if self.defeat_frames and self.defeat_timer < len(self.defeat_frames) / 30.0:
-            ui["def_skip"] = Btn("def_skip", pygame.Rect(0, 0, W, H))
-            return ui
-        ended = not self.defeat_frames or \
-            self.defeat_timer >= len(self.defeat_frames) / 30.0
-        if ended:
-            self._defeat_card_rect = pygame.Rect(0, H - u(124), W, u(124))
-            # Kompletter Screen = unsichtbare Tap-Zone (Neustart)
-            ui["def_tap"] = Btn("def_tap", pygame.Rect(0, 0, W, H))
-        return ui
+        """Defeat-Screen ohne Buttons und ohne Tap-Aktionen.
+        Die Animation laeuft bis zum Ende und das letzte Bild bleibt stehen."""
+        return {}
 
     def _next_stage_target(self):
         """AUFTRAG 20 (PUNKT 3): Ziel des NAECHSTE-Buttons nach einem
@@ -4905,41 +4878,15 @@ class Game:
         return timer >= full
 
     def draw_defeat(self):
-        """PAKET 8.8b: Video-Playback (cover-fit), danach End-VORHANG mit
-        Verlaufskante: "SCHIFF ZERSTÖRT" + pulsierendes "TIPPEN FÜR
-        NEUSTART". KEINE Buttons (8.8a) - ein Tipp irgendwo startet die
-        Stufe neu. Der hoehere Vorhang verdeckt jetzt zuverlaessig die
-        eingebrannten {R}/HAUPTMENUE-Buttons der Animation."""
+        """Zeigt ausschliesslich die Defeat-Animation.
+        Nach dem letzten Frame bleibt das Endbild unveraendert stehen."""
         self._ui = self._layout_defeat()
         if not self.defeat_frames:
             SCREEN.fill((16, 0, 4))
+            neon_text(SCREEN, "SCHIFF ZERSTÖRT", F(18), RED,
+                      (ui_kit.W // 2, ui_kit.H // 2), "center", 2)
         else:
             self._video_overlay(self.defeat_frames, self.defeat_timer)
-        ended = (not self.defeat_frames) or \
-            self.defeat_timer >= len(self.defeat_frames) / 30.0
-        if ended and "def_tap" in self._ui:
-            card = self._defeat_card_rect
-            shade = pygame.Surface((card.w, card.h), pygame.SRCALPHA)
-            shade.fill((5, 2, 6, 232))
-            SCREEN.blit(shade, card.topleft)
-            # Verlaufskante oben (8.8b): weicher Uebergang statt harter Linie
-            gh = max(10, u(22))
-            gk = (card.w, gh)
-            grad = getattr(self, "_defeat_grad", None)
-            if grad is None or grad.get_size() != gk:
-                grad = pygame.Surface(gk, pygame.SRCALPHA)
-                for yy in range(gh):
-                    grad.fill((5, 2, 6, int(232 * (1.0 - yy / (gh - 1)))),
-                              (0, yy, gk[0], 1))
-                self._defeat_grad = grad
-            SCREEN.blit(grad, (card.x, card.y - gh))
-            neon_text(SCREEN, "SCHIFF ZERSTÖRT", F(15), RED,
-                      (card.centerx, card.y + u(46)), "center", 2)
-            # Pulsierender Hinweis statt Buttons (8.8a)
-            _p = 0.5 + 0.5 * math.sin(pygame.time.get_ticks() * 0.003)
-            _hc = (int(96 + 96 * _p), int(96 + 88 * _p), int(106 + 90 * _p))
-            neon_text(SCREEN, "TIPPEN FÜR NEUSTART", F(11), _hc,
-                      (card.centerx, card.y + u(88)), "center", 1)
 
     def draw_stage_clear(self):
         """AUFTRAG 20 (PUNKT 3): Sieg-Screen mit ETAPPEN-UEBERSICHT -
