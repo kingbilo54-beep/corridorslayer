@@ -4457,8 +4457,9 @@ class Game:
             nominal = pve_sys.stage_nominal_reward(
                 self.modules.highest_stage, self.modules.ship_level,
                 self.modules.highest_campaign) * rpg_config.ng_reward_mult(ng)
-            credits_per_hour = nominal * rpg_config.IDLE_KPS * (1.0 + idle_pct) \\
-                * rpg_config.BAL_CREDITS * rpg_config.BAL_IDLE_CREDITS * 3600.0
+            credits_per_hour = (nominal * rpg_config.IDLE_KPS * (1.0 + idle_pct)
+                                * rpg_config.BAL_CREDITS
+                                * rpg_config.BAL_IDLE_CREDITS * 3600.0)
             neon_text(SCREEN, f"ERTRAG: {int(credits_per_hour):,} Cr / STUNDE",
                       F(10), GREEN, (W - m, m + u(64)), "topright")
             # PAKET 8.8b: Stundenlohn-Rhythmus + 8h-Maximum sichtbar
