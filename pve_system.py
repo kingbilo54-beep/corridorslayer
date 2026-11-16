@@ -1932,7 +1932,11 @@ class PvECombat:
                 self.credits += extra
         if self.is_idle:
             self.idle_loot_earned += reward
-            self.idle_kill_counter += 1
+            # Kills waehrend der 2-h-Anlaufphase zaehlen nicht fuer den
+            # Core-Rhythmus; der erste Core kann erst nach 60 vergütbaren
+            # Idle-Abschuessen entstehen.
+            if not frozen:
+                self.idle_kill_counter += 1
             # PAKET 8.4: Idle-Cores seltener (1/25 -> 1/60 Kills)
             # PAKET 8.8b: ... und gar nicht mehr nach 8 h
             if not frozen and self.idle_kill_counter % 60 == 0:
