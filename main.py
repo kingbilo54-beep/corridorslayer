@@ -2317,7 +2317,8 @@ class Game:
         # offline, passend zur skalierten Gegnerwelt.
         _ng = int(getattr(self.modules, "ng_plus", 0) or 0)
         nominal = pve_sys.stage_nominal_reward(
-            self.modules.highest_stage, self.modules.ship_level) \
+            self.modules.highest_stage, self.modules.ship_level,
+            self.modules.highest_campaign) \
             * rpg_config.ng_reward_mult(_ng)
         rate = nominal * rpg_config.IDLE_KPS \
             * (1.0 + idle_pct) * rpg_config.BAL_CREDITS \
@@ -2924,6 +2925,7 @@ class Game:
                 self._nav_active = bid
             if bid == "btn_idle":
                 self.idle_mode = True
+                self.idle_combat.campaign_id = self.modules.highest_campaign
                 self.idle_combat.stage_id = self.modules.highest_stage
                 self._sync_modules_to_combat()
                 # PAKET 8.8b: frische Idle-Sitzung (1h-Auszahlung).
