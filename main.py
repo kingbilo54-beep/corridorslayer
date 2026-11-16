@@ -3160,8 +3160,10 @@ class Game:
             return
 
         if st == self.DEFEAT:
-            # Defeat bleibt ein reiner Endbildschirm: keine Skip- oder
-            # Neustart-Aktion per Tap.
+            if bid == "def_restart":
+                self._restart_stage()
+            elif bid == "def_menu":
+                self.state = self.MENU
             return
 
         if st in (self.STAGE_CLEAR, self.VICTORY):   # AUFTRAG 6: gleiche Buttons
@@ -3832,9 +3834,18 @@ class Game:
         return ui
 
     def _layout_defeat(self):
-        """Defeat-Screen ohne Buttons und ohne Tap-Aktionen.
-        Die Animation laeuft bis zum Ende und das letzte Bild bleibt stehen."""
-        return {}
+        """Zwei unsichtbare Touch-Flaechen ueber den eingebrannten Video-Buttons.
+        Links: Neustart (R), rechts: Hauptmenue (ESC)."""
+        W, H = ui_kit.W, ui_kit.H
+        # Die eingeblendeten R-/ESC-Aktionen liegen am unteren Videorand.
+        # Die Hitboxen bleiben unsichtbar und veraendern das Video nicht.
+        y = int(H * 0.78)
+        h = H - y
+        mid = W // 2
+        return {
+            "def_restart": Btn("def_restart", pygame.Rect(0, y, mid, h)),
+            "def_menu": Btn("def_menu", pygame.Rect(mid, y, W - mid, h)),
+        }
 
     def _next_stage_target(self):
         """AUFTRAG 20 (PUNKT 3): Ziel des NAECHSTE-Buttons nach einem
