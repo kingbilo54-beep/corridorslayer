@@ -404,6 +404,7 @@ IDLE_EFFICIENCY = 0.85             # ALT (AUFTRAG 5) - seit AUFTRAG 18 abgeloest
                                    # durch IDLE_TAPER/Deckel unten; Wert bleibt
                                    # nur fuer alte Tools zurueckkompatibel stehen.
 IDLE_KPS = 0.22                    # virtuelle Abschuesse/s (Messwert Live)
+IDLE_GRACE_S = 2 * 3600            # erste 2 h jeder Idle-Phase ohne Beute
 IDLE_CORE_KILLS = 200              # 1 Data Core je so viele virtuelle Kills
 IDLE_CORE_CAP = 20                 # Core-Deckel pro Bericht
 IDLE_AUTOCOLLECT_S = 8.0           # Live: alle 8 s in die Wallet ueberweisen
