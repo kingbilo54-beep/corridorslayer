@@ -2577,6 +2577,15 @@ class Game:
             if mk:
                 self._ptr = {"kind": "mod", "id": mk}
                 return
+        # Der Zurueck-Button muss auf der Kampagnenkarte Vorrang vor
+        # Kartenobjekten haben. Andernfalls faengt ein Sektor unter seiner
+        # Touch-Flaeche den Klick ab und oeffnet/waehlt eine Kampagnenstufe.
+        if self.state == self.STAGES:
+            back_btn = self._ui.get("stg_back")
+            if back_btn and back_btn.hit(pos):
+                ui_kit.mark_pressed(back_btn.id)
+                self._ptr = {"kind": "btn", "id": back_btn.id}
+                return
         if (self.state == self.STAGES and self.selected_sector == 0
                 and not self.map_scene.blocks_map()):
             # PAKET 7A/7F: Kartenobjekte haben Vorrang - ausser auf dem Panel;
