@@ -2303,7 +2303,13 @@ class Game:
         away = time.time() - prev
         if away < rpg_config.IDLE_MIN_AWAY_S:
             return None
-        capped = min(away, rpg_config.IDLE_CAP_S)
+        # PAKET 9.2: Die ersten zwei Stunden jeder Offline-Phase sind
+        # vollstaendig ertragsfrei. Die Taper-/Cap-Formel arbeitet erst
+        # mit der danach verbleibenden, tatsaechlich vergütbaren Zeit.
+        eligible = max(0.0, away - rpg_config.IDLE_GRACE_S)
+        if eligible <= 0.0:
+            return None
+        capped = min(eligible, rpg_config.IDLE_CAP_S)
         idle_pct = 0.0
         credit_pct = 0.0
         if hasattr(self, "skills"):
@@ -2330,8 +2336,8 @@ class Game:
         cores = min(rpg_config.IDLE_CORE_CAP,
                     int(capped * rpg_config.IDLE_KPS
                         / max(1, rpg_config.IDLE_CORE_KILLS)))
-        return {"away_s": away, "capped_s": capped,
-                "credits": credits, "cores": cores}
+        return {"away_s": away, "eligible_s": eligible,
+                "capped_s": capped, "credits": credits, "cores": cores}
 
     def _collect_idle_report(self):
         """Offline-Beute abholen: in die Wallet, sichern, Meldung zeigen."""
@@ -2707,15 +2713,26 @@ class Game:
         # setzt das Maximum NICHT mehr zurueck (vorher: jede Spielstart-
         # Sitzung bekam frische 8 h und ungedeckelte Cores).
         if self.state == self.PLAYING and self.idle_mode:
-            self._idle_auto_t += dt
+            # Die ersten 2 h der Idle-Phase erzeugen weder Credits noch
+            # Cores. Auszahlungstimer und 8-h-Ertragslimit laufen erst
+            # nach Ende dieser Anlaufphase.
+            previous_idle_t = self._idle_session_t
             self._idle_session_t += dt
+            grace = rpg_config.IDLE_GRACE_S
+            earning_dt = max(0.0, self._idle_session_t - grace) \
+                - max(0.0, previous_idle_t - grace)
+            earning_dt = max(0.0, earning_dt)
+            self.idle_combat.income_delay_remaining_s = max(
+                0.0, grace - self._idle_session_t)
+            if earning_dt > 0.0:
+                self._idle_auto_t += earning_dt
             if self._idle_window_check():
                 self.idle_combat.income_frozen = False
                 self.idle_combat.idle_cores_used = 0
                 self._idle_auto_t = 0.0
             if not self.idle_combat.income_frozen:
                 self.modules.idle_session_used_s = (
-                    float(self.modules.idle_session_used_s) + dt)
+                    float(self.modules.idle_session_used_s) + earning_dt)
                 if (float(self.modules.idle_session_used_s) >= IDLE_SESSION_CAP_S
                         and not getattr(self.idle_combat, "income_frozen", False)):
                     self.idle_combat.income_frozen = True
@@ -2948,6 +2965,7 @@ class Game:
                     >= IDLE_SESSION_CAP_S)
                 self._idle_auto_t = 0.0
                 self._idle_session_t = 0.0
+                self.idle_combat.income_delay_remaining_s = rpg_config.IDLE_GRACE_S
                 self.state = self.PLAYING
             elif bid == "btn_research":
                 self.state = self.RESEARCH
@@ -4436,9 +4454,14 @@ class Game:
                 neon_text(SCREEN, "MAXIMUM ERREICHT (8 H)", F(10), RED,
                           (W - m, m + u(44)), "topright")
             else:
-                rest = max(0, int(IDLE_PAYOUT_S - self._idle_auto_t))
-                neon_text(SCREEN, f"AUSZAHLUNG IN {rest // 60:02d}:{rest % 60:02d}", F(10),
-                          MUTED, (W - m, m + u(44)), "topright")
+                if self._idle_session_t < rpg_config.IDLE_GRACE_S:
+                    rest = max(0, int(rpg_config.IDLE_GRACE_S - self._idle_session_t))
+                    neon_text(SCREEN, f"ERTRAG STARTET IN {rest // 3600:02d}:{(rest % 3600) // 60:02d}", F(10),
+                              MUTED, (W - m, m + u(44)), "topright")
+                else:
+                    rest = max(0, int(IDLE_PAYOUT_S - self._idle_auto_t))
+                    neon_text(SCREEN, f"AUSZAHLUNG IN {rest // 60:02d}:{rest % 60:02d}", F(10),
+                              MUTED, (W - m, m + u(44)), "topright")
         self._ui = self._layout_hud()
         draw_action_bar(SCREEN, self._hud_bar_rect, CYAN, self.elapsed)
         for bid, b in self._ui.items():
