@@ -1717,99 +1717,6 @@ def load_module_image(module_key, level):
         return surf
 
 
-# PAKET 9.0: ECHTE WERFT-MODULGRAFIKEN (transparente PNG-Overlays).
-# Radar besitzt explizite rada_lvl_N-Dateinamen. Antrieb, Drohnen und
-# Hangar enthalten je 12 Bildvarianten: ohne Suffix = Level 1,
-# (1) = Level 2 ... (11) = Level 12.
-_WERFT_ASSET_DIRS = {
-    "radar": "radar",
-    "antrieb": "antrieb",
-    "drohnen": "drohnen",
-    "hangar": "hangar",
-}
-_werft_asset_cache = {}
-
-
-def _werft_asset_path(key, level):
-    folder_name = _WERFT_ASSET_DIRS.get(key)
-    if not folder_name:
-        return None
-    folder = os.path.join(_BASE, folder_name)
-    try:
-        names = [n for n in os.listdir(folder) if n.lower().endswith(".png")]
-    except OSError as e:
-        _log.warning("Werft-Assetordner nicht lesbar (%s): %s", folder, e)
-        return None
-
-    lvl = max(1, int(level))
-    if key == "radar":
-        # Die Radarreihe ist explizit nummeriert und reicht aktuell bis L14.
-        for candidate in range(lvl, 0, -1):
-            path = os.path.join(folder, f"rada_lvl_{candidate}.png")
-            if os.path.isfile(path):
-                return path
-        return None
-
-    ranked = []
-    for name in names:
-        stem = name[:-4]
-        rank = 1
-        if stem.endswith(")") and "(" in stem:
-            suffix = stem.rsplit("(", 1)[1][:-1]
-            if suffix.isdigit():
-                rank = int(suffix) + 1
-        ranked.append((rank, name))
-    ranked.sort(key=lambda item: (item[0], item[1].lower()))
-    if not ranked:
-        return None
-    # Fehlende hohe Stufen verwenden die hoechste vorhandene Grafik.
-    wanted = min(lvl, len(ranked))
-    for rank, name in ranked:
-        if rank == wanted:
-            return os.path.join(folder, name)
-    return os.path.join(folder, ranked[-1][1])
-
-
-def load_werft_asset(key, level):
-    """Laedt eine transparente Modul-Grafik und cached sie unskaliert."""
-    path = _werft_asset_path(key, level)
-    if path is None:
-        return None
-    cache_key = (key, os.path.basename(path))
-    if cache_key in _werft_asset_cache:
-        return _werft_asset_cache[cache_key]
-    try:
-        raw = pygame.image.load(path).convert_alpha()
-        bounds = raw.get_bounding_rect(min_alpha=8)
-        if bounds.width <= 0 or bounds.height <= 0:
-            return None
-        image = pygame.Surface((bounds.width, bounds.height), pygame.SRCALPHA)
-        image.blit(raw, (0, 0), bounds)
-        _werft_asset_cache[cache_key] = image
-        return image
-    except Exception as e:
-        _log.warning("Werft-Grafik konnte nicht geladen werden (%s): %s", path, e)
-        return None
-
-
-def _draw_werft_asset(surface, key, level, center, max_w, max_h, alpha=None):
-    """Skaliert ein Modul proportional in einen maximalen Zielrahmen."""
-    image = load_werft_asset(key, level)
-    if image is None:
-        return False
-    iw, ih = image.get_size()
-    scale = min(float(max_w) / max(1, iw), float(max_h) / max(1, ih))
-    if scale <= 0:
-        return False
-    size = (max(1, int(iw * scale)), max(1, int(ih * scale)))
-    rendered = pygame.transform.smoothscale(image, size)
-    if alpha is not None:
-        rendered.set_alpha(max(0, min(255, int(alpha))))
-    surface.blit(rendered, rendered.get_rect(center=(int(center[0]), int(center[1]))))
-    return True
-
-
-
 # PAKET 7E: Verfuegbare Kanonen-Bildstufen im Ordner (1x scannen, cachen).
 _kan_avail_cache = {}
 
@@ -1863,6 +1770,318 @@ def load_kanonen_image(level):
         surf = pygame.Surface((25, 25), pygame.SRCALPHA)
         kanonen_images[lvl] = surf
         return surf
+
+
+# =====================================================================
+# AUFTRAG WERFT-INTEGRATION: Modulgrafiken am Schiff (NUR Werft-Ansicht)
+# ---------------------------------------------------------------------
+# Die Ordner antrieb/, radar/, hangar/ und drohnen/ enthalten die vom
+# Nutzer gelieferten PNGs: radar als rada_lvl_N.png (1..14), die
+# uebrigen mit generischen Gemini-/Sheet-Dateinamen in Download-
+# Reihenfolge (Basisbild, dann (1), (2), ... numerisch). Es werden
+# AUSSCHLIESSLICH diese vorhandenen Assets benutzt - keine Ersatz-
+# grafiken. Fehlt ein Bild, liefert der Loader None und die Werft
+# zeichnet an dieser Stelle einfach nichts (Zustand wie bisher).
+#
+# Positionen/Groessen stehen in WERFT_LAYOUT relativ zum Schiffs-
+# rechteck (UV 0..1 je Schiffsstufe) - keine absoluten Bildschirm-
+# koordinaten. Der Kanonen-Anker wird direkt aus der vorhandenen
+# Waffenposition CANNON_OFFSETS abgeleitet, damit Werft und Gefecht
+# denselben Geschuetzstandort zeigen.
+# =====================================================================
+ANTRIEB_FOLDER = _folder("antrieb", r"C:\Users\bsahi\Desktop\corridorSlayers\DS4\antrieb")
+RADAR_FOLDER = _folder("radar", r"C:\Users\bsahi\Desktop\corridorSlayers\DS4\radar")
+HANGAR_FOLDER = _folder("hangar", r"C:\Users\bsahi\Desktop\corridorSlayers\DS4\hangar")
+DRONEN_FOLDER = _folder("drohnen", r"C:\Users\bsahi\Desktop\corridorSlayers\DS4\drohnen")
+
+_part_files_cache = {}
+_part_img_cache = {}
+
+
+def _nat_filename_key(fname):
+    """Natuerliche Sortierung: Basisbild zuerst, danach (1), (2), ...
+    numerisch - '(10)' kommt NACH '(2)' (os.listdir wuerde sonst
+    '(1), (10), (11), (2)' liefern und das Level-Mapping verschieben)."""
+    stem = os.path.splitext(fname)[0].rstrip()
+    if stem.endswith(")"):
+        i = stem.rfind("(")
+        if i >= 0 and stem[i + 1:-1].isdigit():
+            return (1, int(stem[i + 1:-1]))
+    return (0, 0)
+
+
+def _part_files(folder):
+    """PNG-Namen eines Modul-Ordners in natuerlicher Reihenfolge
+    (Download-Reihenfolge = Level 1..N), einmalig gescannt + gecacht."""
+    names = _part_files_cache.get(folder)
+    if names is None:
+        try:
+            names = [f for f in os.listdir(folder) if f.lower().endswith(".png")]
+        except OSError as e:
+            _log.warning("Werft-Asset-Ordner nicht lesbar: %s (%s)", folder, e)
+            names = []
+        names.sort(key=_nat_filename_key)
+        _part_files_cache[folder] = names
+    return names
+
+
+def _load_part_crop(folder, fname):
+    """Original-Zuschnitt (get_bounding_rect) eines Werft-Assets.
+    Transparenz und Seitenverhaeltnis bleiben unveraendert; skaliert
+    wird erst zur Laufzeit relativ zum Schiffsrechteck."""
+    key = (folder, fname)
+    if key in _part_img_cache:
+        return _part_img_cache[key]
+    img = None
+    try:
+        raw = pygame.image.load(os.path.join(folder, fname)).convert_alpha()
+        rect = raw.get_bounding_rect()
+        img = pygame.Surface((max(1, rect.width), max(1, rect.height)),
+                             pygame.SRCALPHA)
+        img.blit(raw, (0, 0), rect)
+    except Exception as e:
+        _log.warning("Werft-Asset nicht ladbar: %s/%s (%s)", folder, fname, e)
+        img = None
+    _part_img_cache[key] = img
+    return img
+
+
+def _generic_part_image(folder, level):
+    """Level -> generisches Modul-PNG (antrieb/hangar/drohnen).
+    Die natuerlich sortierten Dateien bilden die Level 1..N ab;
+    Stufen ueber N nutzen das letzte Bild (naechstniedrigere Logik)."""
+    files = _part_files(folder)
+    if not files:
+        return None
+    idx = min(len(files) - 1, max(0, int(level) - 1))
+    return _load_part_crop(folder, files[idx])
+
+
+def load_antrieb_image(level):
+    """Antriebsblock-PNG fuer die Werft (Level 1..12+ -> vorhandene Dateien)."""
+    return _generic_part_image(ANTRIEB_FOLDER, level)
+
+
+def load_hangar_image(level):
+    """Hangar-PNG fuer die Werft (Level 1..12+ -> vorhandene Dateien)."""
+    return _generic_part_image(HANGAR_FOLDER, level)
+
+
+def load_drone_image(level):
+    """Drohnen-PNG fuer die Werft-Vorschau (Level 1..12+ -> vorhandene Dateien)."""
+    return _generic_part_image(DRONEN_FOLDER, level)
+
+
+_rada_avail_cache = {}
+
+
+def _available_rada_levels():
+    """Vorhandene rada_lvl_N.png-Stufen (1x scannen, cachen)."""
+    if "lvls" not in _rada_avail_cache:
+        lvls = set()
+        try:
+            for f in os.listdir(RADAR_FOLDER):
+                n = f.lower()
+                if n.startswith("rada_lvl_") and n.endswith(".png"):
+                    try:
+                        lvls.add(int(n[len("rada_lvl_"):-4]))
+                    except ValueError as e:
+                        _log.warning("Radar-Bildname ohne Levelnummer ueberlesen: %s (%s)",
+                                     f, e)
+        except OSError as e:
+            _log.warning("Radar-Ordner nicht lesbar: %s", e)
+        _rada_avail_cache["lvls"] = lvls
+    return _rada_avail_cache["lvls"]
+
+
+def _resolve_rada_level(level):
+    """Radar-Stufe auf vorhandenes Bild abbilden (naechstniedrigere Stufe;
+    das Bild verschwindet nie, weil der Aufrufer bei None nur nichts zeichnet)."""
+    lvl = max(1, int(level))
+    avail = _available_rada_levels()
+    while lvl > 1 and avail and lvl not in avail:
+        lvl -= 1
+    return lvl
+
+
+def load_radar_image(level):
+    """Radar-PNG fuer die Werft (volle Aufloesung, Zuschnitt wie gehabt)."""
+    lvl = _resolve_rada_level(level)
+    return _load_part_crop(RADAR_FOLDER, f"rada_lvl_{lvl}.png")
+
+
+def load_kanonen_crop(level):
+    """Kanonen-PNG in voller Aufloesung fuer die Werft (Originalzuschnitt).
+    Das Gefecht bleibt unveraendert bei load_kanonen_image (25 px)."""
+    lvl = _resolve_kanonen_level(level)
+    key = ("kanonen_crop", lvl)
+    if key not in _part_img_cache:
+        img = None
+        try:
+            raw = pygame.image.load(
+                os.path.join(KANONEN_FOLDER, f"kanonen_lvl_{lvl}.png")).convert_alpha()
+            rect = raw.get_bounding_rect()
+            img = pygame.Surface((max(1, rect.width), max(1, rect.height)),
+                                 pygame.SRCALPHA)
+            img.blit(raw, (0, 0), rect)
+        except Exception as e:
+            _log.warning("Kanonen-Bild nicht ladbar: lvl %s (%s)", lvl, e)
+            img = None
+        _part_img_cache[key] = img
+    return _part_img_cache[key]
+
+
+# ---------------------------------------------------------------------
+# WERFT-LAYOUT: Positionen/Groessen RELATIV zum Schiffsrechteck.
+# Key = geladenes Schiffs-Bild (fortress.level, naechstniedrigere Stufe).
+#   engine  : (ux, uy) MITTE des Antriebsblocks - der Rumpf verdeckt den
+#             vorderen (rechtseiligen) Teil, die Duesen ragen nach
+#             links/oben aus dem Heck heraus.
+#   engine_w: Antriebsbreite als Anteil der Schiffs-BREITE.
+#   radar   : (ux, uy) FUSSPUNKT der Radarantenne (midbottom-Anker) auf
+#             dem Heckaufbau; radar_h = Zielhoehe als Anteil der
+#             Schiffs-HOEHE (klein! feste Schiffsantenne, kein Funkturm).
+#   hangar  : (ux, uy) MITTE der vorhandenen Hangar-Aussparung im Rumpf;
+#             hangar_w/hangar_hmax = Zielgroesse als Anteil von
+#             Schiffs-Breite/Hoehe (der Rumpfrand rahmt die Grafik ein).
+#   drone_* : Parkpositionen der Drohnen RELATIV zur Hangarbox
+#             (dx, dy = Anteil von Hangarbreite/-hoehe), drone_w =
+#             Drohnenbreite als Anteil der Schiffs-BREITE.
+#   cannon_w: Turmbreite als Anteil der Schiffs-BREITE; der Standort
+#             selbst kommt aus CANNON_OFFSETS (Waffenposition des
+#             Gefechts) und wird als UV auf das Schiffsrechteck abgebildet.
+#   hotspots: UV-Anker der Modul-Hotspots (Zeichnen UND Hit-Test nutzen
+#             dieselbe Quelle _werft_hotspots).
+# Alle Werte beziehen sich auf den auf 160 px Breite normierten
+# Schiffs-Ausschnitt (fortress.target_width); die Hoehe ergibt sich
+# aus dem Seitenverhaeltnis des jeweiligen ship_lvl_N.png.
+# ---------------------------------------------------------------------
+WERFT_LAYOUT_DEFAULT = {
+    "engine": (0.075, 0.155), "engine_w": 0.30,
+    "radar": (0.235, 0.135), "radar_h": 0.185,
+    "hangar": (0.545, 0.465), "hangar_w": 0.205, "hangar_hmax": 0.30,
+    "drone_w": 0.085,
+    "drone_slots": ((-0.34, -0.16), (0.24, -0.24), (-0.26, 0.28), (0.30, 0.22)),
+    "cannon_w": 0.21,
+    "hotspots": {
+        "antrieb": (0.055, 0.185), "radar": (0.235, 0.135),
+        "kanonen": (0.525, 0.335), "hangar": (0.545, 0.465),
+        "reparatur": (0.415, 0.615), "huelle": (0.315, 0.40),
+        "reaktor": (0.36, 0.245), "schild": (0.70, 0.62),
+    },
+}
+WERFT_LAYOUT = {
+    1: {"engine": (0.095, 0.165), "engine_w": 0.30,
+        "radar": (0.235, 0.135), "radar_h": 0.185,
+        "hangar": (0.545, 0.465), "hangar_w": 0.205, "hangar_hmax": 0.30,
+        "cannon_w": 0.21,
+        "hotspots": {
+            "antrieb": (0.065, 0.185), "radar": (0.235, 0.135),
+            "kanonen": (0.525, 0.335), "hangar": (0.545, 0.465),
+            "reparatur": (0.415, 0.615), "huelle": (0.315, 0.40),
+            "reaktor": (0.36, 0.245), "schild": (0.70, 0.62),
+        }},
+    2: {"engine": (0.075, 0.145), "engine_w": 0.28,
+        "radar": (0.215, 0.115), "radar_h": 0.175,
+        "hangar": (0.515, 0.46), "hangar_w": 0.185, "hangar_hmax": 0.28,
+        "cannon_w": 0.21,
+        "hotspots": {
+            "antrieb": (0.05, 0.165), "radar": (0.215, 0.115),
+            "kanonen": (0.525, 0.34), "hangar": (0.515, 0.46),
+            "reparatur": (0.36, 0.615), "huelle": (0.28, 0.38),
+            "reaktor": (0.34, 0.235), "schild": (0.72, 0.63),
+        }},
+    3: {"engine": (0.055, 0.13), "engine_w": 0.26,
+        "radar": (0.16, 0.105), "radar_h": 0.175,
+        "hangar": (0.68, 0.53), "hangar_w": 0.165, "hangar_hmax": 0.28,
+        "cannon_w": 0.21,
+        "hotspots": {
+            "antrieb": (0.035, 0.15), "radar": (0.16, 0.105),
+            "kanonen": (0.525, 0.325), "hangar": (0.68, 0.53),
+            "reparatur": (0.30, 0.60), "huelle": (0.30, 0.36),
+            "reaktor": (0.36, 0.22), "schild": (0.78, 0.62),
+        }},
+    4: {"engine": (0.06, 0.165), "engine_w": 0.27,
+        "radar": (0.235, 0.10), "radar_h": 0.175,
+        "hangar": (0.635, 0.51), "hangar_w": 0.17, "hangar_hmax": 0.28,
+        "cannon_w": 0.21,
+        "hotspots": {
+            "antrieb": (0.04, 0.19), "radar": (0.235, 0.10),
+            "kanonen": (0.525, 0.33), "hangar": (0.635, 0.51),
+            "reparatur": (0.335, 0.60), "huelle": (0.29, 0.37),
+            "reaktor": (0.37, 0.225), "schild": (0.76, 0.63),
+        }},
+    5: {"engine": (0.08, 0.145), "engine_w": 0.27,
+        "radar": (0.30, 0.095), "radar_h": 0.17,
+        "hangar": (0.735, 0.585), "hangar_w": 0.19, "hangar_hmax": 0.30,
+        "cannon_w": 0.21,
+        "hotspots": {
+            "antrieb": (0.055, 0.175), "radar": (0.30, 0.095),
+            "kanonen": (0.525, 0.315), "hangar": (0.735, 0.585),
+            "reparatur": (0.36, 0.60), "huelle": (0.31, 0.35),
+            "reaktor": (0.40, 0.21), "schild": (0.80, 0.63),
+        }},
+    6: {"engine": (0.075, 0.125), "engine_w": 0.26,
+        "radar": (0.27, 0.095), "radar_h": 0.17,
+        "hangar": (0.465, 0.565), "hangar_w": 0.155, "hangar_hmax": 0.32,
+        "cannon_w": 0.21,
+        "hotspots": {
+            "antrieb": (0.05, 0.15), "radar": (0.27, 0.095),
+            "kanonen": (0.525, 0.315), "hangar": (0.465, 0.565),
+            "reparatur": (0.26, 0.63), "huelle": (0.28, 0.35),
+            "reaktor": (0.38, 0.21), "schild": (0.80, 0.62),
+        }},
+    7: {"engine": (0.045, 0.295), "engine_w": 0.24,
+        "radar": (0.305, 0.075), "radar_h": 0.115,
+        "hangar": (0.52, 0.565), "hangar_w": 0.155, "hangar_hmax": 0.26,
+        "cannon_w": 0.21,
+        "hotspots": {
+            "antrieb": (0.03, 0.30), "radar": (0.305, 0.075),
+            "kanonen": (0.525, 0.38), "hangar": (0.52, 0.565),
+            "reparatur": (0.28, 0.66), "huelle": (0.36, 0.40),
+            "reaktor": (0.42, 0.27), "schild": (0.78, 0.62),
+        }},
+    8: {"engine": (0.045, 0.295), "engine_w": 0.24,
+        "radar": (0.305, 0.075), "radar_h": 0.115,
+        "hangar": (0.52, 0.565), "hangar_w": 0.155, "hangar_hmax": 0.26,
+        "cannon_w": 0.21,
+        "hotspots": {
+            "antrieb": (0.03, 0.30), "radar": (0.305, 0.075),
+            "kanonen": (0.525, 0.38), "hangar": (0.52, 0.565),
+            "reparatur": (0.28, 0.66), "huelle": (0.36, 0.40),
+            "reaktor": (0.42, 0.27), "schild": (0.78, 0.62),
+        }},
+    9: {"engine": (0.045, 0.295), "engine_w": 0.24,
+        "radar": (0.30, 0.07), "radar_h": 0.115,
+        "hangar": (0.52, 0.565), "hangar_w": 0.155, "hangar_hmax": 0.26,
+        "cannon_w": 0.21,
+        "hotspots": {
+            "antrieb": (0.03, 0.30), "radar": (0.30, 0.07),
+            "kanonen": (0.525, 0.38), "hangar": (0.52, 0.565),
+            "reparatur": (0.28, 0.66), "huelle": (0.36, 0.40),
+            "reaktor": (0.42, 0.27), "schild": (0.78, 0.62),
+        }},
+    10: {"engine": (0.06, 0.33), "engine_w": 0.26,
+         "radar": (0.40, 0.115), "radar_h": 0.10,
+         "hangar": (0.57, 0.70), "hangar_w": 0.20, "hangar_hmax": 0.22,
+         "cannon_w": 0.21,
+         "hotspots": {
+             "antrieb": (0.035, 0.34), "radar": (0.40, 0.115),
+             "kanonen": (0.525, 0.41), "hangar": (0.57, 0.70),
+             "reparatur": (0.36, 0.80), "huelle": (0.30, 0.45),
+             "reaktor": (0.44, 0.32), "schild": (0.80, 0.58),
+         }},
+}
+
+
+def _werft_drone_count(hangar_level, extra_drones=0):
+    """Anzahl parkender Drohnen in der Werft = exakt die Anzahl, die das
+    Gefecht auch fliegen wuerde (pve_system: min(6, hangar-1+extra)), hier
+    auf die 4 sichtbaren Starplaetze der Hangarbox begrenzt. Stufe 1 hat
+    keine Drohnen im Gefecht -> auch keine in der Werft."""
+    if hangar_level <= 1:
+        return 0
+    return max(0, min(4, (hangar_level - 1) + int(extra_drones)))
 
 
 def load_video_frames(path):
@@ -2396,13 +2615,7 @@ class Game:
         away = time.time() - prev
         if away < rpg_config.IDLE_MIN_AWAY_S:
             return None
-        # PAKET 9.2: Die ersten zwei Stunden jeder Offline-Phase sind
-        # vollstaendig ertragsfrei. Die Taper-/Cap-Formel arbeitet erst
-        # mit der danach verbleibenden, tatsaechlich vergütbaren Zeit.
-        eligible = max(0.0, away - rpg_config.IDLE_GRACE_S)
-        if eligible <= 0.0:
-            return None
-        capped = min(eligible, rpg_config.IDLE_CAP_S)
+        capped = min(away, rpg_config.IDLE_CAP_S)
         idle_pct = 0.0
         credit_pct = 0.0
         if hasattr(self, "skills"):
@@ -2416,8 +2629,7 @@ class Game:
         # offline, passend zur skalierten Gegnerwelt.
         _ng = int(getattr(self.modules, "ng_plus", 0) or 0)
         nominal = pve_sys.stage_nominal_reward(
-            self.modules.highest_stage, self.modules.ship_level,
-            self.modules.highest_campaign) \
+            self.modules.highest_stage, self.modules.ship_level) \
             * rpg_config.ng_reward_mult(_ng)
         rate = nominal * rpg_config.IDLE_KPS \
             * (1.0 + idle_pct) * rpg_config.BAL_CREDITS \
@@ -2429,8 +2641,8 @@ class Game:
         cores = min(rpg_config.IDLE_CORE_CAP,
                     int(capped * rpg_config.IDLE_KPS
                         / max(1, rpg_config.IDLE_CORE_KILLS)))
-        return {"away_s": away, "eligible_s": eligible,
-                "capped_s": capped, "credits": credits, "cores": cores}
+        return {"away_s": away, "capped_s": capped,
+                "credits": credits, "cores": cores}
 
     def _collect_idle_report(self):
         """Offline-Beute abholen: in die Wallet, sichern, Meldung zeigen."""
@@ -2676,15 +2888,6 @@ class Game:
             if mk:
                 self._ptr = {"kind": "mod", "id": mk}
                 return
-        # Der Zurueck-Button muss auf der Kampagnenkarte Vorrang vor
-        # Kartenobjekten haben. Andernfalls faengt ein Sektor unter seiner
-        # Touch-Flaeche den Klick ab und oeffnet/waehlt eine Kampagnenstufe.
-        if self.state == self.STAGES:
-            back_btn = self._ui.get("stg_back")
-            if back_btn and back_btn.hit(pos):
-                ui_kit.mark_pressed(back_btn.id)
-                self._ptr = {"kind": "btn", "id": back_btn.id}
-                return
         if (self.state == self.STAGES and self.selected_sector == 0
                 and not self.map_scene.blocks_map()):
             # PAKET 7A/7F: Kartenobjekte haben Vorrang - ausser auf dem Panel;
@@ -2806,26 +3009,15 @@ class Game:
         # setzt das Maximum NICHT mehr zurueck (vorher: jede Spielstart-
         # Sitzung bekam frische 8 h und ungedeckelte Cores).
         if self.state == self.PLAYING and self.idle_mode:
-            # Die ersten 2 h der Idle-Phase erzeugen weder Credits noch
-            # Cores. Auszahlungstimer und 8-h-Ertragslimit laufen erst
-            # nach Ende dieser Anlaufphase.
-            previous_idle_t = self._idle_session_t
+            self._idle_auto_t += dt
             self._idle_session_t += dt
-            grace = rpg_config.IDLE_GRACE_S
-            earning_dt = max(0.0, self._idle_session_t - grace) \
-                - max(0.0, previous_idle_t - grace)
-            earning_dt = max(0.0, earning_dt)
-            self.idle_combat.income_delay_remaining_s = max(
-                0.0, grace - self._idle_session_t)
-            if earning_dt > 0.0:
-                self._idle_auto_t += earning_dt
             if self._idle_window_check():
                 self.idle_combat.income_frozen = False
                 self.idle_combat.idle_cores_used = 0
                 self._idle_auto_t = 0.0
             if not self.idle_combat.income_frozen:
                 self.modules.idle_session_used_s = (
-                    float(self.modules.idle_session_used_s) + earning_dt)
+                    float(self.modules.idle_session_used_s) + dt)
                 if (float(self.modules.idle_session_used_s) >= IDLE_SESSION_CAP_S
                         and not getattr(self.idle_combat, "income_frozen", False)):
                     self.idle_combat.income_frozen = True
@@ -3044,7 +3236,6 @@ class Game:
                 self._nav_active = bid
             if bid == "btn_idle":
                 self.idle_mode = True
-                self.idle_combat.campaign_id = self.modules.highest_campaign
                 self.idle_combat.stage_id = self.modules.highest_stage
                 self._sync_modules_to_combat()
                 # PAKET 8.8b: frische Idle-Sitzung (1h-Auszahlung).
@@ -3058,7 +3249,6 @@ class Game:
                     >= IDLE_SESSION_CAP_S)
                 self._idle_auto_t = 0.0
                 self._idle_session_t = 0.0
-                self.idle_combat.income_delay_remaining_s = rpg_config.IDLE_GRACE_S
                 self.state = self.PLAYING
             elif bid == "btn_research":
                 self.state = self.RESEARCH
@@ -3253,10 +3443,15 @@ class Game:
             return
 
         if st == self.DEFEAT:
-            if bid == "def_restart":
+            # PAKET 8.7: Skip waehrend des Videos.
+            # PAKET 8.8a: danach keine Buttons mehr - TAP irgendwo =
+            # Stufe neu starten (zum Hauptmenue: im Gefecht Pause ->
+            # "ZUM HAUPTMENÜ").
+            if bid == "def_skip":
+                if self.defeat_frames:
+                    self.defeat_timer = len(self.defeat_frames) / 30.0
+            elif bid == "def_tap":
                 self._restart_stage()
-            elif bid == "def_menu":
-                self.state = self.MENU
             return
 
         if st in (self.STAGE_CLEAR, self.VICTORY):   # AUFTRAG 6: gleiche Buttons
@@ -3754,6 +3949,12 @@ class Game:
     # ---------------- PAKET 7B: Werft - Schiff als interaktives Objekt ----------------
     # Modul-Hotspots als UV relativ zur Schiffsbild-Box. Zeichnung und
     # Hit-Test nutzen DIESELBE Quelle (_werft_hotspots).
+    # AUFTRAG WERFT-INTEGRATION: die Anker kommen jetzt aus WERFT_LAYOUT
+    # (je Schiffsstufe) und sitzen damit AUF den gezeichneten Modulgrafiken
+    # (Antrieb am Heckblock, Radar auf dem Heckaufbau, Kanone an der
+    # Waffenposition aus CANNON_OFFSETS, Hangar in der Rumpf-Aussparung).
+    # Das alte Klassen-Diktat bleibt als Fallback fuer unbekannte Stufen
+    # erhalten; die Hit-Test-Logik ist unveraendert.
     SHIP_HOTSPOTS = {
         "radar": (0.90, 0.42),
         "kanonen": (0.50, 0.16),
@@ -3772,6 +3973,26 @@ class Game:
     MOD_SHORT = {"kanonen": "Waffen", "schild": "Schild", "huelle": "Hülle",
                  "reaktor": "Reaktor", "antrieb": "Antrieb", "hangar": "Hangar",
                  "radar": "Radar", "reparatur": "Reparatur"}
+
+    def _werft_layout(self):
+        """AUFTRAG WERFT-INTEGRATION: Layout der Modulgrafiken/Hotspots
+        fuer die GELADENE Schiffsstufe (fortress.level - naechstniedrigere
+        vorhandene ship_lvl_N.png). Alle Werte sind UV relativ zum
+        Schiffsrechteck; unbekannte Stufen fallen auf die Defaults."""
+        lvl = max(1, int(getattr(self.fortress, "level", 1) or 1))
+        lay = WERFT_LAYOUT.get(lvl)
+        if lay is None:
+            return dict(WERFT_LAYOUT_DEFAULT)
+        return lay
+
+    def _werft_cannon_uv(self):
+        """Vorhandene Waffenposition (CANNON_OFFSETS, Gefechts-Weltkoords
+        bei 160 px Schiffsbreite) als UV auf das Schiffsrechteck - Werft
+        und Gefecht zeigen denselben Geschuetzstandort."""
+        base = getattr(self.fortress, "_base_image", None)
+        iw, ih = base.get_size() if base is not None else (160, 80)
+        cox, coy = CANNON_OFFSETS[0]
+        return (0.5 + cox / float(iw), 0.5 + coy / float(ih))
 
     def _werft_ship_rect(self, stage):
         """Box des Schiffsbildes in der Buehne (gecacht pro Groesse)."""
@@ -3794,11 +4015,13 @@ class Game:
 
     def _werft_hotspots(self):
         """Screen-Positionen der Modul-Hotspots (EINZIGE Quelle fuer Zeichnen
-        und Hit-Test - wie bei der Galaxiekarte)."""
+        und Hit-Test - wie bei der Galaxiekarte). Quelle ist das stufen-
+        abhaengige WERFT_LAYOUT; Hotspots sitzen damit auf den Modulgrafiken."""
         stage = self._werft_stage
         ship = self._werft_ship_rect(stage)
+        hs = self._werft_layout().get("hotspots") or self.SHIP_HOTSPOTS
         return {key: (ship.x + int(ux * ship.w), ship.y + int(uy * ship.h))
-                for key, (ux, uy) in self.SHIP_HOTSPOTS.items()}
+                for key, (ux, uy) in hs.items()}
 
     def _werft_hit(self, pos):
         """Modul unter dem Finger (Kreis-Hit) oder None. Radius adaptiv:
@@ -3927,18 +4150,29 @@ class Game:
         return ui
 
     def _layout_defeat(self):
-        """Zwei unsichtbare Touch-Flaechen ueber den eingebrannten Video-Buttons.
-        Links: Neustart (R), rechts: Hauptmenue (ESC)."""
+        """PAKET 8.7: Waehrend des Videos ist der ganze Screen der
+        unsichtbare Skip.
+        PAKET 8.8a (Nutzerwunsch "die zusaetzlichen Buttons weg"):
+        Nach dem Video KEINE Buttons mehr - ein TAP irgendwo startet die
+        Stufe neu.
+        PAKET 8.8b: Der End-VORHANG ist wieder hoeher (u(124) statt
+        u(96)) und mit Verlaufskante - die in die Defeat-Animation
+        eingebrannten {R}-NEUSTART/HAUPTMENUE-Buttons guckten oben wieder
+        heraus (Nutzer: "Es kommt wieder ein pop up"). Zusätzlich wird
+        das Video per cover-fit auf den ganzen Screen skaliert, sodass
+        die eingebrannten Buttons IMMER am unteren Rand liegen."""
         W, H = ui_kit.W, ui_kit.H
-        # Die eingeblendeten R-/ESC-Aktionen liegen am unteren Videorand.
-        # Die Hitboxen bleiben unsichtbar und veraendern das Video nicht.
-        y = int(H * 0.78)
-        h = H - y
-        mid = W // 2
-        return {
-            "def_restart": Btn("def_restart", pygame.Rect(0, y, mid, h)),
-            "def_menu": Btn("def_menu", pygame.Rect(mid, y, W - mid, h)),
-        }
+        ui = {}
+        if self.defeat_frames and self.defeat_timer < len(self.defeat_frames) / 30.0:
+            ui["def_skip"] = Btn("def_skip", pygame.Rect(0, 0, W, H))
+            return ui
+        ended = not self.defeat_frames or \
+            self.defeat_timer >= len(self.defeat_frames) / 30.0
+        if ended:
+            self._defeat_card_rect = pygame.Rect(0, H - u(124), W, u(124))
+            # Kompletter Screen = unsichtbare Tap-Zone (Neustart)
+            ui["def_tap"] = Btn("def_tap", pygame.Rect(0, 0, W, H))
+        return ui
 
     def _next_stage_target(self):
         """AUFTRAG 20 (PUNKT 3): Ziel des NAECHSTE-Buttons nach einem
@@ -4146,26 +4380,66 @@ class Game:
             col = GREEN if self.modules.credits >= mod.cost else RED
             text(SCREEN, f"{mod.cost} Cr", F(10), col, (rect.centerx, y + u(28)), "midtop")
 
-    def draw_research(self):
-        """PAKET 7B: WERFT - das Schiff ist die interaktive Upgrade-Flaeche.
-        Hotspots direkt am Modul-Sitz + Chip-Leiste; Detail-Panel mit echten
-        Werten, naechster Stufe, Kosten und Upgrade-Button."""
-        self._draw_menu_backdrop()
-        self._ui = self._layout_research()
-        W, H = ui_kit.W, ui_kit.H
-        m = margin()
-        self._draw_header("SCHIFFS-WERFT", CYAN)
-        text(SCREEN, f"CREDITS: {self.credits_display():,} Cr", F(11), GREEN,
-             (W - m - icon_touch() - u(4), m + icon_touch() // 2), "midright")
-        stage = self._werft_stage
-        panel = self._werft_panel
-        ship = self._werft_ship_rect(stage)
-        # --- Buehne + Schiff (kosmetische Optik - stabil, keine Auto-Aufwertung) ---
-        glass_panel(SCREEN, stage, accent=CYAN_SOFT, radius=u(12), alpha=110, width=1)
-        # PAKET 7C: dezenter Kameraimpuls waehrend einer Upgrade-Animation
-        shx, shy = self.upgrade_fx.shake()
-        ship_draw = ship.move((shx, shy))
+    def _draw_werft_ship(self, ship, ship_draw):
+        """AUFTRAG WERFT-INTEGRATION (reine Zeichnung, keine Spiellogik):
+        Rumpf + Modul-PNGs als EIN zusammenhaengendes Schiff.
+
+        Zeichenreihenfolge (Painter's Algorithm):
+          1. Antriebsblock  - HINTER dem Rumpf gezeichnet; der Rumpf
+             verdeckt seinen vorderen Teil, die Duesen ragen aus dem
+             hinteren Schiffsteil (oben links) heraus.
+          2. Schiffsrumpf
+          3. Hangar         - sitzt IN der vorhandenen Aussparung; der
+             Rumpfrand rahmt die Grafik teilweise ein.
+          4. Drohnen        - parken auf FESTEN Starplaetzen in der
+             Hangarbox (keine Kreisformation, keine Zufallspositionen).
+          5. Radar          - Fusspunkt auf dem Deck des Heckaufbaus
+             (midbottom-Anker + Kontaktschatten -> wirkt fest
+             installiert, deutlich verkleinert, kein Funkturm).
+          6. Kanone         - an der vorhandenen Waffenposition
+             (CANNON_OFFSETS als UV), Kontaktschatten wie im Gefecht.
+
+        Alle Anker/Groessen kommen aus WERFT_LAYOUT (je Schiffsstufe,
+        UV relativ zum Schiffsrechteck). Levelbilder werden pro Frame
+        aus modules.get(<Modul>).level aufgeloest -> nach einem Upgrade
+        erscheint die passende Grafik sofort, ohne Neustart.
+        """
+        lay = self._werft_layout()
         base = getattr(self.fortress, "_base_image", None)
+
+        def P(uv):
+            return (ship_draw.x + int(uv[0] * ship_draw.w),
+                    ship_draw.y + int(uv[1] * ship_draw.h))
+
+        def scale_w(img, target_w):
+            tw = max(2, int(target_w))
+            th = max(2, int(tw * img.get_height() / img.get_width()))
+            return pygame.transform.smoothscale(img, (tw, th))
+
+        def scale_h(img, target_h):
+            th = max(2, int(target_h))
+            tw = max(2, int(th * img.get_width() / img.get_height()))
+            return pygame.transform.smoothscale(img, (tw, th))
+
+        def contact_shadow(cx, cy, w, h):
+            """Weicher Boden-Schatten, damit aufgesetzte Teile 'aufliegen'."""
+            w, h = max(2, int(w)), max(2, int(h))
+            sh = pygame.Surface((w, h), pygame.SRCALPHA)
+            pygame.draw.ellipse(sh, (0, 0, 0, 78), (0, 0, w, h))
+            SCREEN.blit(sh, (int(cx - w / 2), int(cy - h / 2)))
+
+        # --- 1) ANTRIEB: HINTER dem Rumpf (Rumpf verdeckt ihn teilweise) ---
+        eng = load_antrieb_image(self.modules.get("antrieb").level)
+        if eng is not None:
+            # Duesen der Asset-Grafiken zeigen nach rechts -> 180 Grad,
+            # damit der Abgasstrom wie im Gefecht (EngineEffect) nach
+            # links/oben aus dem Heck weist.
+            eng_rot = pygame.transform.rotate(eng, lay.get("engine_rot", 180))
+            eng_s = scale_w(eng_rot, lay.get("engine_w", 0.30) * ship_draw.w)
+            ex, ey = P(lay.get("engine", (0.075, 0.155)))
+            SCREEN.blit(eng_s, eng_s.get_rect(center=(ex, ey)))
+
+        # --- 2) SCHIFFSRUMPF (verdeckt den vorderen Antriebsteil) ---
         if base is not None:
             # PAKET 7E: Cache-Key mit Schiffs-Stufe - nach einem Upgrade
             # erscheint das neue Schiffsbild sofort (kein altes Caching).
@@ -4180,35 +4454,91 @@ class Game:
             self.fortress.x, self.fortress.y = ship_draw.center
             self.fortress.draw(SCREEN)
             self.fortress.x, self.fortress.y = ox, oy
-        # --- PAKET 9.0: Modul-Grafiken direkt auf/um das Schiff legen ---
-        # Positionen stammen aus SHIP_HOTSPOTS und bleiben damit deckungsgleich
-        # mit den vorhandenen Touch-Hotspots. Die Assets sind transparente PNGs.
-        hs_draw = self._werft_hotspots()
-        for asset_key, width_factor, height_factor in (
-                ("antrieb", 0.30, 0.48),
-                ("radar", 0.22, 0.52),
-                ("hangar", 0.30, 0.52)):
-            anchor = hs_draw.get(asset_key)
-            if anchor:
-                _draw_werft_asset(
-                    SCREEN, asset_key, self.modules.get(asset_key).level,
-                    (anchor[0] + shx, anchor[1] + shy),
-                    ship.w * width_factor, ship.h * height_factor)
 
-        # Echte Drohnen-Grafik als Vorschau um das Schiff herum.
-        hang_l = self.modules.get("hangar").level
-        extra_d = int(self.skills.modifiers().get("extra_drones", 0)) \
-            if hasattr(self, "skills") else 0
-        if hang_l > 1:
-            n_prev = min(6, hang_l - 1 + extra_d)
-            drone_level = min(hang_l, 12)
-            for i in range(n_prev):
-                orb = self.elapsed * 0.7 + i * (math.tau / n_prev)
-                dx = ship.centerx + int(math.cos(orb) * ship.w * 0.60) + shx
-                dy = ship.centery - u(6) + int(math.sin(orb) * ship.h * 0.82) + shy
-                _draw_werft_asset(
-                    SCREEN, "drohnen", drone_level, (dx, dy),
-                    ship.w * 0.15, ship.h * 0.30, alpha=205)
+        # --- 3) HANGAR: in der vorhandenen Aussparung, vom Rumpf gerahmt ---
+        hang = load_hangar_image(self.modules.get("hangar").level)
+        if hang is not None:
+            hw = lay.get("hangar_w", 0.20) * ship_draw.w
+            hh = hw * hang.get_height() / hang.get_width()
+            max_hh = lay.get("hangar_hmax", 0.30) * ship_draw.h
+            if hh > max_hh:
+                hh = max_hh
+                hw = hh * hang.get_width() / hang.get_height()
+            hang_s = pygame.transform.smoothscale(
+                hang, (max(2, int(hw)), max(2, int(hh))))
+            hx, hy = P(lay.get("hangar", (0.545, 0.465)))
+            SCREEN.blit(hang_s, hang_s.get_rect(center=(hx, hy)))
+
+            # --- 4) DROHNEN: feste Starplaetze in der Hangarbox ---
+            # Anzahl = die, die das Gefecht auch fliegen wuerde
+            # (pve_system: hangar-1 + extra_drones, hier max 4 Plaetze).
+            extra_d = int(self.skills.modifiers().get("extra_drones", 0)) \
+                if hasattr(self, "skills") else 0
+            n_drones = _werft_drone_count(
+                self.modules.get("hangar").level, extra_d)
+            dw = lay.get("drone_w", 0.055) * ship_draw.w
+            slots = lay.get("drone_slots") or WERFT_LAYOUT_DEFAULT["drone_slots"]
+            drone_img = load_drone_image(self.modules.get("hangar").level) \
+                if n_drones > 0 else None
+            for i in range(n_drones):
+                if drone_img is None:
+                    break
+                dx_uv, dy_uv = slots[i % len(slots)]
+                dx = hx + int(dx_uv * hang_s.get_width())
+                dy = hy + int(dy_uv * hang_s.get_height())
+                drone_s = scale_w(drone_img, dw)
+                SCREEN.blit(drone_s, drone_s.get_rect(center=(dx, dy)))
+
+        # --- 5) RADAR: deutlich verkleinerte Antenne auf dem Heckaufbau ---
+        rad = load_radar_image(self.modules.get("radar").level)
+        if rad is not None:
+            rad_s = scale_h(rad, lay.get("radar_h", 0.18) * ship_draw.h)
+            rx, ry = P(lay.get("radar", (0.235, 0.135)))
+            contact_shadow(rx, ry,
+                           int(rad_s.get_width() * 0.85),
+                           max(3, int(rad_s.get_height() * 0.15)))
+            # midbottom-Anker: der Fuss der Grafik sitzt AUF dem Deck.
+            SCREEN.blit(rad_s, rad_s.get_rect(midbottom=(rx, ry)))
+
+        # --- 6) KANONE: vorhandene Waffenposition, Levelbild wie im Gefecht ---
+        turret = load_kanonen_crop(self.modules.get("kanonen").level)
+        if turret is not None:
+            tur_s = scale_w(turret, lay.get("cannon_w", 0.156) * ship_draw.w)
+            cx, cy = P(self._werft_cannon_uv())
+            contact_shadow(cx, cy + int(tur_s.get_height() * 0.30),
+                           int(tur_s.get_width() * 0.62),
+                           max(3, int(tur_s.get_height() * 0.16)))
+            SCREEN.blit(tur_s, tur_s.get_rect(center=(cx, cy)))
+
+    def draw_research(self):
+        """PAKET 7B: WERFT - das Schiff ist die interaktive Upgrade-Flaeche.
+        Hotspots direkt am Modul-Sitz + Chip-Leiste; Detail-Panel mit echten
+        Werten, naechster Stufe, Kosten und Upgrade-Button."""
+        self._draw_menu_backdrop()
+        self._ui = self._layout_research()
+        W, H = ui_kit.W, ui_kit.H
+        m = margin()
+        self._draw_header("SCHIFFS-WERFT", CYAN)
+        text(SCREEN, f"CREDITS: {self.credits_display():,} Cr", F(11), GREEN,
+             (W - m - icon_touch() - u(4), m + icon_touch() // 2), "midright")
+        stage = self._werft_stage
+        panel = self._werft_panel
+        ship = self._werft_ship_rect(stage)
+        # --- Buehne + Schiff mit INTEGRIERTEN Modulgrafiken (kosmetische
+        # Optik - stabil, keine Auto-Aufwertung). Zeichenreihenfolge
+        # (Painter's Algorithm; Heck = oben links, Nase = unten rechts):
+        #   1. Antriebsblock - HINTER dem Rumpf, Duesen ragen heraus
+        #   2. Schiffsrumpf  - verdeckt den vorderen Antriebsteil
+        #   3. Hangar        - in der vorhandenen Rumpf-Aussparung
+        #   4. Drohnen       - parken auf festen Starplaetzen im Hangar
+        #   5. Radar         - kleine Antenne auf dem Heckaufbau
+        #   6. Kanone        - an der vorhandenen Waffenposition
+        # Hotspots + Detail-Panel folgen darueber (unveraendert).
+        glass_panel(SCREEN, stage, accent=CYAN_SOFT, radius=u(12), alpha=110, width=1)
+        # PAKET 7C: dezenter Kameraimpuls waehrend einer Upgrade-Animation
+        shx, shy = self.upgrade_fx.shake()
+        ship_draw = ship.move((shx, shy))
+        self._draw_werft_ship(ship, ship_draw)
         text(SCREEN, "MODULE ANTIPPEN ODER CHIP-LEISTE NUTZEN", F(8), MUTED,
              (stage.centerx, stage.y + u(7)), "midtop")
         # --- PAKET 7E: Schiffs-Stufe + Aufwertung (das Schiff SELBST) ---
@@ -4542,32 +4872,14 @@ class Game:
                       (W - m, m + u(2)), "topright")
             neon_text(SCREEN, f"GESAMT: {self.modules.credits + combat.credits:,} Cr", F(10),
                       MUTED, (W - m, m + u(24)), "topright")
-            # Transparente, dynamische Ertragsrate aus derselben Formel
-            # wie der Live-Kill-Ertrag (kein statischer Beispielwert).
-            idle_mods = self.skills.modifiers() if hasattr(self, "skills") else {}
-            idle_pct = float(idle_mods.get("idle_pct", 0.0))
-            ng = int(getattr(self.modules, "ng_plus", 0) or 0)
-            nominal = pve_sys.stage_nominal_reward(
-                self.modules.highest_stage, self.modules.ship_level,
-                self.modules.highest_campaign) * rpg_config.ng_reward_mult(ng)
-            credits_per_hour = (nominal * rpg_config.IDLE_KPS * (1.0 + idle_pct)
-                                * rpg_config.BAL_CREDITS
-                                * rpg_config.BAL_IDLE_CREDITS * 3600.0)
-            neon_text(SCREEN, f"ERTRAG: {int(credits_per_hour):,} Cr / STUNDE",
-                      F(10), GREEN, (W - m, m + u(64)), "topright")
             # PAKET 8.8b: Stundenlohn-Rhythmus + 8h-Maximum sichtbar
             if getattr(self.idle_combat, "income_frozen", False):
                 neon_text(SCREEN, "MAXIMUM ERREICHT (8 H)", F(10), RED,
                           (W - m, m + u(44)), "topright")
             else:
-                if self._idle_session_t < rpg_config.IDLE_GRACE_S:
-                    rest = max(0, int(rpg_config.IDLE_GRACE_S - self._idle_session_t))
-                    neon_text(SCREEN, f"ERTRAG STARTET IN {rest // 3600:02d}:{(rest % 3600) // 60:02d}", F(10),
-                              MUTED, (W - m, m + u(44)), "topright")
-                else:
-                    rest = max(0, int(IDLE_PAYOUT_S - self._idle_auto_t))
-                    neon_text(SCREEN, f"AUSZAHLUNG IN {rest // 60:02d}:{rest % 60:02d}", F(10),
-                              MUTED, (W - m, m + u(44)), "topright")
+                rest = max(0, int(IDLE_PAYOUT_S - self._idle_auto_t))
+                neon_text(SCREEN, f"AUSZAHLUNG IN {rest // 60:02d}:{rest % 60:02d}", F(10),
+                          MUTED, (W - m, m + u(44)), "topright")
         self._ui = self._layout_hud()
         draw_action_bar(SCREEN, self._hud_bar_rect, CYAN, self.elapsed)
         for bid, b in self._ui.items():
@@ -4998,15 +5310,41 @@ class Game:
         return timer >= full
 
     def draw_defeat(self):
-        """Zeigt ausschliesslich die Defeat-Animation.
-        Nach dem letzten Frame bleibt das Endbild unveraendert stehen."""
+        """PAKET 8.8b: Video-Playback (cover-fit), danach End-VORHANG mit
+        Verlaufskante: "SCHIFF ZERSTÖRT" + pulsierendes "TIPPEN FÜR
+        NEUSTART". KEINE Buttons (8.8a) - ein Tipp irgendwo startet die
+        Stufe neu. Der hoehere Vorhang verdeckt jetzt zuverlaessig die
+        eingebrannten {R}/HAUPTMENUE-Buttons der Animation."""
         self._ui = self._layout_defeat()
         if not self.defeat_frames:
             SCREEN.fill((16, 0, 4))
-            neon_text(SCREEN, "SCHIFF ZERSTÖRT", F(18), RED,
-                      (ui_kit.W // 2, ui_kit.H // 2), "center", 2)
         else:
             self._video_overlay(self.defeat_frames, self.defeat_timer)
+        ended = (not self.defeat_frames) or \
+            self.defeat_timer >= len(self.defeat_frames) / 30.0
+        if ended and "def_tap" in self._ui:
+            card = self._defeat_card_rect
+            shade = pygame.Surface((card.w, card.h), pygame.SRCALPHA)
+            shade.fill((5, 2, 6, 232))
+            SCREEN.blit(shade, card.topleft)
+            # Verlaufskante oben (8.8b): weicher Uebergang statt harter Linie
+            gh = max(10, u(22))
+            gk = (card.w, gh)
+            grad = getattr(self, "_defeat_grad", None)
+            if grad is None or grad.get_size() != gk:
+                grad = pygame.Surface(gk, pygame.SRCALPHA)
+                for yy in range(gh):
+                    grad.fill((5, 2, 6, int(232 * (1.0 - yy / (gh - 1)))),
+                              (0, yy, gk[0], 1))
+                self._defeat_grad = grad
+            SCREEN.blit(grad, (card.x, card.y - gh))
+            neon_text(SCREEN, "SCHIFF ZERSTÖRT", F(15), RED,
+                      (card.centerx, card.y + u(46)), "center", 2)
+            # Pulsierender Hinweis statt Buttons (8.8a)
+            _p = 0.5 + 0.5 * math.sin(pygame.time.get_ticks() * 0.003)
+            _hc = (int(96 + 96 * _p), int(96 + 88 * _p), int(106 + 90 * _p))
+            neon_text(SCREEN, "TIPPEN FÜR NEUSTART", F(11), _hc,
+                      (card.centerx, card.y + u(88)), "center", 1)
 
     def draw_stage_clear(self):
         """AUFTRAG 20 (PUNKT 3): Sieg-Screen mit ETAPPEN-UEBERSICHT -
