@@ -1910,7 +1910,7 @@ def _load_engine_sprite_data(level):
         return None
 
 
-def draw_engine_sprites(surface, level, hull_edge_pos, scale=1.0):
+def draw_engine_sprites(surface, level, hull_edge_pos, scale=1.0, angle=-45.0):
     """Zeichnet Gehaeuse + animierte Flamme anhand der meta.json-Anker."""
     data = _load_engine_sprite_data(level)
     if data is None:
@@ -1942,11 +1942,12 @@ def draw_engine_sprites(surface, level, hull_edge_pos, scale=1.0):
         body = pygame.transform.smoothscale(body, size)
         flame = pygame.transform.smoothscale(flame, size)
 
-    # Das Schiff liegt in der Werft diagonal: Nase rechts unten,
-    # Heck/Schubachse links oben. Die bisher nur horizontal gespiegelten
-    # Sprites standen deshalb quer zum Rumpf. Beide Ebenen gemeinsam um
-    # 45 Grad im Uhrzeigersinn drehen (pygame: negativer Winkel).
-    engine_angle = -45.0
+    # Nach dem horizontalen Spiegeln zeigt die lokale Schubachse nach
+    # links. Im Werft-Rumpf liegt die Nase rechts-unten und das Heck links-
+    # oben. -45 Grad in pygame richten die gespiegelte -X-Achse exakt auf
+    # dieses Heck aus. Der Winkel kommt aus WERFT_LAYOUT und kann je
+    # Schiffsstufe angepasst werden.
+    engine_angle = float(angle)
     body = pygame.transform.rotate(body, engine_angle)
     flame = pygame.transform.rotate(flame, engine_angle)
 
@@ -2045,10 +2046,12 @@ def load_kanonen_crop(level):
 # ---------------------------------------------------------------------
 # WERFT-LAYOUT: Positionen/Groessen RELATIV zum Schiffsrechteck.
 # Key = geladenes Schiffs-Bild (fortress.level, naechstniedrigere Stufe).
-#   engine  : (ux, uy) MITTE des Antriebsblocks - der Rumpf verdeckt den
-#             vorderen (rechtseiligen) Teil, die Duesen ragen nach
-#             links/oben aus dem Heck heraus.
-#   engine_w: Antriebsbreite als Anteil der Schiffs-BREITE.
+#   engine  : (ux, uy) HULL-ANSCHLUSSPUNKT des Antriebs; hier trifft
+#             hull_edge_x_recommended aus meta.json auf die Heckkante.
+#   engine_w: sichtbare Gehaeusebreite als Anteil der Schiffs-BREITE;
+#             die Skalierung wird aus engine_w und meta.json/body_w berechnet.
+#   engine_angle: Pygame-Drehwinkel nach horizontalem Spiegeln
+#             (Standard -45 Grad: Schubachse zeigt links-oben).
 #   radar   : (ux, uy) FUSSPUNKT der Radarantenne (midbottom-Anker) auf
 #             dem Heckaufbau; radar_h = Zielhoehe als Anteil der
 #             Schiffs-HOEHE (klein! feste Schiffsantenne, kein Funkturm).
@@ -2069,6 +2072,7 @@ def load_kanonen_crop(level):
 # ---------------------------------------------------------------------
 WERFT_LAYOUT_DEFAULT = {
     "engine": (0.075, 0.155), "engine_w": 0.30,
+    "engine_angle": -45.0,
     "radar": (0.235, 0.135), "radar_h": 0.185,
     "hangar": (0.545, 0.465), "hangar_w": 0.205, "hangar_hmax": 0.30,
     "drone_w": 0.085,
@@ -4528,8 +4532,21 @@ class Game:
         # meta.json an der Heckkante ausgerichtet. Der Rumpf wird danach
         # darueber gezeichnet und verdeckt den Montageflansch.
         ex, ey = P(lay.get("engine", (0.075, 0.155)))
+        engine_level = self.modules.get("antrieb").level
+        engine_data = _load_engine_sprite_data(engine_level)
+        engine_anchor = (engine_data or {}).get("info", {}).get("anchor", {})
+        # engine_w ist die gewuenschte sichtbare Gehaeusebreite relativ
+        # zur Schiffsbreite; body_w stammt aus meta.json. So bleibt der
+        # Antrieb auf kleinen und grossen Werft-Aufloesungen proportional.
+        source_body_w = max(1.0, float(engine_anchor.get("body_w", 116.0)))
+        target_body_w = max(1.0, float(lay.get("engine_w", 0.30)) * ship_draw.w)
+        engine_scale = max(0.15, min(3.0, target_body_w / source_body_w))
+        engine_angle = float(lay.get(
+            "engine_angle", WERFT_LAYOUT_DEFAULT["engine_angle"]
+        ))
         draw_engine_sprites(
-            SCREEN, self.modules.get("antrieb").level, (ex, ey), scale=1.0
+            SCREEN, engine_level, (ex, ey),
+            scale=engine_scale, angle=engine_angle
         )
 
         # --- 2) SCHIFFSRUMPF (verdeckt den vorderen Antriebsteil) ---
