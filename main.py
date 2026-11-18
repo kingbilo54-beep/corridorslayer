@@ -1858,8 +1858,102 @@ def _generic_part_image(folder, level):
 
 
 def load_antrieb_image(level):
-    """Antriebsblock-PNG fuer die Werft (Level 1..12+ -> vorhandene Dateien)."""
+    """Legacy-Loader fuer die bisherigen Antriebsbilder."""
     return _generic_part_image(ANTRIEB_FOLDER, level)
+
+
+# Neue, levelgenau benannte Antriebs-Sprites aus antriebe/.
+# meta.json definiert Zellgroesse, Framezahl, FPS und Montageanker.
+ENGINE_SPRITE_FOLDER = _folder("antriebe", os.path.join(_BASE, "antriebe"))
+_engine_sprite_meta = None
+_engine_sprite_cache = {}
+
+
+def _load_engine_sprite_data(level):
+    global _engine_sprite_meta
+    lvl = max(1, min(12, int(level)))
+    if lvl in _engine_sprite_cache:
+        return _engine_sprite_cache[lvl]
+    try:
+        if _engine_sprite_meta is None:
+            with open(os.path.join(ENGINE_SPRITE_FOLDER, "meta.json"),
+                      "r", encoding="utf-8") as fh:
+                _engine_sprite_meta = json.load(fh)
+        info = _engine_sprite_meta[str(lvl)]
+        cell_w, cell_h = map(int, info.get("cell", (512, 384)))
+        frame_count = max(1, int(info.get("frames", 8)))
+        body = pygame.image.load(
+            os.path.join(ENGINE_SPRITE_FOLDER, info["body"])
+        ).convert_alpha()
+        sheet = pygame.image.load(
+            os.path.join(ENGINE_SPRITE_FOLDER, info["flame"])
+        ).convert_alpha()
+        if body.get_size() != (cell_w, cell_h):
+            raise ValueError(
+                f"Antrieb Level {lvl}: Body-Groesse {body.get_size()} "
+                f"statt {(cell_w, cell_h)}"
+            )
+        if sheet.get_width() != cell_w or sheet.get_height() < cell_h * frame_count:
+            raise ValueError(
+                f"Antrieb Level {lvl}: ungueltiges Flammen-Sheet "
+                f"{sheet.get_size()} fuer {frame_count} Frames"
+            )
+        frames = [
+            sheet.subsurface((0, i * cell_h, cell_w, cell_h)).copy()
+            for i in range(frame_count)
+        ]
+        data = {"info": info, "body": body, "frames": frames}
+        _engine_sprite_cache[lvl] = data
+        return data
+    except Exception as exc:
+        _log.warning("Neue Antriebsgrafik Level %s nicht ladbar: %s", lvl, exc)
+        return None
+
+
+def draw_engine_sprites(surface, level, hull_edge_pos, scale=1.0):
+    """Zeichnet Gehaeuse + animierte Flamme anhand der meta.json-Anker."""
+    data = _load_engine_sprite_data(level)
+    if data is None:
+        return False
+    info = data["info"]
+    anchor = info.get("anchor", {})
+    cell_w, cell_h = map(int, info.get("cell", (512, 384)))
+    fps = max(1, int(info.get("fps", 12)))
+    frames = data["frames"]
+    count = len(frames)
+
+    # Die Quelldateien stossen nach rechts aus; unser Schiff fliegt nach
+    # rechts. Horizontal spiegeln, damit die Flamme nach hinten links zeigt.
+    body = pygame.transform.flip(data["body"], True, False)
+    tick = int(pygame.time.get_ticks() * fps / 1000.0)
+    anim = str(info.get("anim", "steady")).lower()
+    if anim == "alternate" and count > 1:
+        period = 2 * count - 2
+        frame_index = tick % period
+        if frame_index >= count:
+            frame_index = period - frame_index
+    else:
+        frame_index = tick % count
+    flame = pygame.transform.flip(frames[frame_index], True, False)
+
+    s = max(0.1, float(scale))
+    if abs(s - 1.0) > 0.001:
+        size = (max(1, int(cell_w * s)), max(1, int(cell_h * s)))
+        body = pygame.transform.smoothscale(body, size)
+        flame = pygame.transform.smoothscale(flame, size)
+
+    # Nach flip_h liegt der urspruengliche hull_edge_x bei cell_w - x.
+    hull_edge_x = int(anchor.get("hull_edge_x_recommended", 140))
+    bank_cy = int(anchor.get("bank_cy", cell_h // 2))
+    anchor_x = (cell_w - hull_edge_x) * s
+    anchor_y = bank_cy * s
+    left = int(round(hull_edge_pos[0] - anchor_x))
+    top = int(round(hull_edge_pos[1] - anchor_y))
+
+    # Laut Metadaten: Gehaeuse -> Flamme -> Schiffsrumpf.
+    surface.blit(body, (left, top))
+    surface.blit(flame, (left, top))
+    return True
 
 
 def load_hangar_image(level):
@@ -4412,16 +4506,14 @@ class Game:
             pygame.draw.ellipse(sh, (0, 0, 0, 78), (0, 0, w, h))
             SCREEN.blit(sh, (int(cx - w / 2), int(cy - h / 2)))
 
-        # --- 1) ANTRIEB: HINTER dem Rumpf (Rumpf verdeckt ihn teilweise) ---
-        eng = load_antrieb_image(self.modules.get("antrieb").level)
-        if eng is not None:
-            # Duesen der Asset-Grafiken zeigen nach rechts -> 180 Grad,
-            # damit der Abgasstrom wie im Gefecht (EngineEffect) nach
-            # links/oben aus dem Heck weist.
-            eng_rot = pygame.transform.rotate(eng, lay.get("engine_rot", 180))
-            eng_s = scale_w(eng_rot, lay.get("engine_w", 0.30) * ship_draw.w)
-            ex, ey = P(lay.get("engine", (0.075, 0.155)))
-            SCREEN.blit(eng_s, eng_s.get_rect(center=(ex, ey)))
+        # --- 1) ANTRIEB: Gehaeuse + animierte Flamme HINTER dem Rumpf ---
+        # Die neue Sprite-Zelle wird exakt ueber hull_edge_x/bank_cy aus
+        # meta.json an der Heckkante ausgerichtet. Der Rumpf wird danach
+        # darueber gezeichnet und verdeckt den Montageflansch.
+        ex, ey = P(lay.get("engine", (0.075, 0.155)))
+        draw_engine_sprites(
+            SCREEN, self.modules.get("antrieb").level, (ex, ey), scale=1.0
+        )
 
         # --- 2) SCHIFFSRUMPF (verdeckt den vorderen Antriebsteil) ---
         if base is not None:
