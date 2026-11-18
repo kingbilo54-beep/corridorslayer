@@ -1942,13 +1942,30 @@ def draw_engine_sprites(surface, level, hull_edge_pos, scale=1.0):
         body = pygame.transform.smoothscale(body, size)
         flame = pygame.transform.smoothscale(flame, size)
 
-    # Nach flip_h liegt der urspruengliche hull_edge_x bei cell_w - x.
+    # Das Schiff liegt in der Werft diagonal: Nase rechts unten,
+    # Heck/Schubachse links oben. Die bisher nur horizontal gespiegelten
+    # Sprites standen deshalb quer zum Rumpf. Beide Ebenen gemeinsam um
+    # 45 Grad im Uhrzeigersinn drehen (pygame: negativer Winkel).
+    engine_angle = -45.0
+    body = pygame.transform.rotate(body, engine_angle)
+    flame = pygame.transform.rotate(flame, engine_angle)
+
+    # Montageanker zuerst nach flip_h bestimmen und danach mit derselben
+    # Rotation wie die Sprites um deren Mittelpunkt transformieren.
     hull_edge_x = int(anchor.get("hull_edge_x_recommended", 140))
     bank_cy = int(anchor.get("bank_cy", cell_h // 2))
     anchor_x = (cell_w - hull_edge_x) * s
     anchor_y = bank_cy * s
-    left = int(round(hull_edge_pos[0] - anchor_x))
-    top = int(round(hull_edge_pos[1] - anchor_y))
+    src_w, src_h = cell_w * s, cell_h * s
+    dx = anchor_x - src_w / 2.0
+    dy = anchor_y - src_h / 2.0
+    rad = math.radians(engine_angle)
+    rotated_dx = math.cos(rad) * dx + math.sin(rad) * dy
+    rotated_dy = -math.sin(rad) * dx + math.cos(rad) * dy
+    rotated_anchor_x = body.get_width() / 2.0 + rotated_dx
+    rotated_anchor_y = body.get_height() / 2.0 + rotated_dy
+    left = int(round(hull_edge_pos[0] - rotated_anchor_x))
+    top = int(round(hull_edge_pos[1] - rotated_anchor_y))
 
     # Laut Metadaten: Gehaeuse -> Flamme -> Schiffsrumpf.
     surface.blit(body, (left, top))
