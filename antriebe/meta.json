@@ -1,0 +1,721 @@
+{
+ "1": {
+  "name": "engine_lvl01_ion_scope_body_512x384.png",
+  "slug": "ion_scope",
+  "body": "engine_lvl01_ion_scope_body_512x384.png",
+  "flame": "engine_lvl01_ion_scope_flame_8frames_512x384.png",
+  "special": false,
+  "anim": "steady",
+  "flame_palette": "sun",
+  "frames": 8,
+  "fps": 12,
+  "cell": [
+   512,
+   384
+  ],
+  "layout": "vertical_stack",
+  "housing_source": "Original 01 - Ion Scope (alte Vorlage)",
+  "anchor": {
+   "bell_exit_x": 198,
+   "flame_root_x": 166,
+   "flame_root_overlap": 32,
+   "max_covered_body_fraction": 0.37,
+   "hull_edge_x_recommended": 140,
+   "bank_cy": 192,
+   "mount_x": 112,
+   "body_w": 86,
+   "body_h": 64,
+   "bell_h": 43,
+   "nozzles": [
+    {
+     "cx": 192,
+     "cy": 194,
+     "ball_r": 26
+    }
+   ]
+  },
+  "sprites": {
+   "draw_order": [
+    "engine_body",
+    "flame",
+    "ship_hull"
+   ],
+   "flame_sheet": "engine_lvl01_ion_scope_flame_8frames_512x384.png",
+   "body_png": "engine_lvl01_ion_scope_body_512x384.png",
+   "body_static": true,
+   "flame_on_top": true
+  },
+  "integration": {
+   "layer": "Gehaeuse ZUERST, Flamme DARUEBER (die Feuerkugeln liegen auf dem Gehaeuse), Rumpf ganz oben. Zeichnreihenfolge pro Frame: Gehaeuse -> Flamme -> Rumpf.",
+   "position": "Zelle x=140 (hull_edge_x_recommended) an die Heckkante des Rumpfs heften, Zelle y=192 an die Antriebs-Mittelachse; beide Sprites teilen dieselbe Zelle -> an derselben Position zeichnen. Die Gehaeuse sind so platziert, dass sie etwa zur Haelfte vom Rumpf verdeckt werden (Montageflansch links hinter dem Rumpf).",
+   "scale": "1.0 passt fuer Ruempfe von ~150-260 px Hoehe; beide Sprites mit demselben Faktor uniform skalieren.",
+   "flip": "Ausstoss zeigt nach RECHTS (Schiffe fliegen nach links); flip_h im Engine-Code fuer die andere Richtung.",
+   "animation": "Flame-Sheet looped bei 12 fps (8 Frames, loop-sicher); Gehaeuse-Sprite ist statisch (alte Vorlage, unveraenderlich).",
+   "overlap": "JE Duese bekommt ihre eigene runde Feuerkugel am Ausgang (anchor.nozzles: cx/cy = Duesenoeffnung, ball_r = Kugelradius). Die Kugel ist groesser als die Oeffnung (~1.5x), liegt ON dem Gehaeuse und glueht ueber das Heck zurueck - bedeckt aber pro Stufe max. ~50% der Gehaeusebreite, die Gehaeuse-Front bleibt immer klar sichtbar, das Getriebe wird nie vollstaendig verdeckt. Hinter der Kugel laeuft der schlanke Kegel der Referenz spitz nach hinten aus.",
+   "note": "Gehaeuse = die alte Vorlage im natuerlichen, leicht gekippten Look (kein Redesign). Flamme = Referenz-Look (v1 Vorlage): kompakte Kegelflammen PRO Duese + vergroesserte Feuerkugel direkt am Ausgang, weiss-gluehender Kern, gesaettigter Rand, Pulsieren/Flackern + Partikel, ab Stufe 9 frame-variierender Energie-Blitz."
+  },
+  "desc": "Ion-Antrieb: alte Vorlage, Kugel an der Oeffnung + kompakter Kegel (Orange/Gelb)"
+ },
+ "2": {
+  "name": "engine_lvl02_retro_cam_body_512x384.png",
+  "slug": "retro_cam",
+  "body": "engine_lvl02_retro_cam_body_512x384.png",
+  "flame": "engine_lvl02_retro_cam_flame_8frames_512x384.png",
+  "special": false,
+  "anim": "sputter",
+  "flame_palette": "ember",
+  "frames": 8,
+  "fps": 12,
+  "cell": [
+   512,
+   384
+  ],
+  "layout": "vertical_stack",
+  "housing_source": "Original 02 - Retro Cam (alte Vorlage)",
+  "anchor": {
+   "bell_exit_x": 198,
+   "flame_root_x": 160,
+   "flame_root_overlap": 38,
+   "max_covered_body_fraction": 0.45,
+   "hull_edge_x_recommended": 140,
+   "bank_cy": 192,
+   "mount_x": 114,
+   "body_w": 84,
+   "body_h": 72,
+   "bell_h": 53,
+   "nozzles": [
+    {
+     "cx": 192,
+     "cy": 193,
+     "ball_r": 32
+    }
+   ]
+  },
+  "sprites": {
+   "draw_order": [
+    "engine_body",
+    "flame",
+    "ship_hull"
+   ],
+   "flame_sheet": "engine_lvl02_retro_cam_flame_8frames_512x384.png",
+   "body_png": "engine_lvl02_retro_cam_body_512x384.png",
+   "body_static": true,
+   "flame_on_top": true
+  },
+  "integration": {
+   "layer": "Gehaeuse ZUERST, Flamme DARUEBER (die Feuerkugeln liegen auf dem Gehaeuse), Rumpf ganz oben. Zeichnreihenfolge pro Frame: Gehaeuse -> Flamme -> Rumpf.",
+   "position": "Zelle x=140 (hull_edge_x_recommended) an die Heckkante des Rumpfs heften, Zelle y=192 an die Antriebs-Mittelachse; beide Sprites teilen dieselbe Zelle -> an derselben Position zeichnen. Die Gehaeuse sind so platziert, dass sie etwa zur Haelfte vom Rumpf verdeckt werden (Montageflansch links hinter dem Rumpf).",
+   "scale": "1.0 passt fuer Ruempfe von ~150-260 px Hoehe; beide Sprites mit demselben Faktor uniform skalieren.",
+   "flip": "Ausstoss zeigt nach RECHTS (Schiffe fliegen nach links); flip_h im Engine-Code fuer die andere Richtung.",
+   "animation": "Flame-Sheet looped bei 12 fps (8 Frames, loop-sicher); Gehaeuse-Sprite ist statisch (alte Vorlage, unveraenderlich).",
+   "overlap": "JE Duese bekommt ihre eigene runde Feuerkugel am Ausgang (anchor.nozzles: cx/cy = Duesenoeffnung, ball_r = Kugelradius). Die Kugel ist groesser als die Oeffnung (~1.5x), liegt ON dem Gehaeuse und glueht ueber das Heck zurueck - bedeckt aber pro Stufe max. ~50% der Gehaeusebreite, die Gehaeuse-Front bleibt immer klar sichtbar, das Getriebe wird nie vollstaendig verdeckt. Hinter der Kugel laeuft der schlanke Kegel der Referenz spitz nach hinten aus.",
+   "note": "Gehaeuse = die alte Vorlage im natuerlichen, leicht gekippten Look (kein Redesign). Flamme = Referenz-Look (v1 Vorlage): kompakte Kegelflammen PRO Duese + vergroesserte Feuerkugel direkt am Ausgang, weiss-gluehender Kern, gesaettigter Rand, Pulsieren/Flackern + Partikel, ab Stufe 9 frame-variierender Energie-Blitz."
+  },
+  "desc": "Retro-Cam: alte Vorlage, stotternder Schub, grosse Kugel (Orange)"
+ },
+ "3": {
+  "name": "engine_lvl03_duel_lens_body_512x384.png",
+  "slug": "duel_lens",
+  "body": "engine_lvl03_duel_lens_body_512x384.png",
+  "flame": "engine_lvl03_duel_lens_flame_8frames_512x384.png",
+  "special": false,
+  "anim": "alternate",
+  "flame_palette": "flare",
+  "frames": 8,
+  "fps": 12,
+  "cell": [
+   512,
+   384
+  ],
+  "layout": "vertical_stack",
+  "housing_source": "Original 03 - Duel Lens (alte Vorlage)",
+  "anchor": {
+   "bell_exit_x": 208,
+   "flame_root_x": 179,
+   "flame_root_overlap": 29,
+   "max_covered_body_fraction": 0.31,
+   "hull_edge_x_recommended": 140,
+   "bank_cy": 192,
+   "mount_x": 114,
+   "body_w": 94,
+   "body_h": 88,
+   "bell_h": 64,
+   "nozzles": [
+    {
+     "cx": 196,
+     "cy": 186,
+     "ball_r": 17
+    },
+    {
+     "cx": 196,
+     "cy": 209,
+     "ball_r": 16
+    }
+   ]
+  },
+  "sprites": {
+   "draw_order": [
+    "engine_body",
+    "flame",
+    "ship_hull"
+   ],
+   "flame_sheet": "engine_lvl03_duel_lens_flame_8frames_512x384.png",
+   "body_png": "engine_lvl03_duel_lens_body_512x384.png",
+   "body_static": true,
+   "flame_on_top": true
+  },
+  "integration": {
+   "layer": "Gehaeuse ZUERST, Flamme DARUEBER (die Feuerkugeln liegen auf dem Gehaeuse), Rumpf ganz oben. Zeichnreihenfolge pro Frame: Gehaeuse -> Flamme -> Rumpf.",
+   "position": "Zelle x=140 (hull_edge_x_recommended) an die Heckkante des Rumpfs heften, Zelle y=192 an die Antriebs-Mittelachse; beide Sprites teilen dieselbe Zelle -> an derselben Position zeichnen. Die Gehaeuse sind so platziert, dass sie etwa zur Haelfte vom Rumpf verdeckt werden (Montageflansch links hinter dem Rumpf).",
+   "scale": "1.0 passt fuer Ruempfe von ~150-260 px Hoehe; beide Sprites mit demselben Faktor uniform skalieren.",
+   "flip": "Ausstoss zeigt nach RECHTS (Schiffe fliegen nach links); flip_h im Engine-Code fuer die andere Richtung.",
+   "animation": "Flame-Sheet looped bei 12 fps (8 Frames, loop-sicher); Gehaeuse-Sprite ist statisch (alte Vorlage, unveraenderlich).",
+   "overlap": "JE Duese bekommt ihre eigene runde Feuerkugel am Ausgang (anchor.nozzles: cx/cy = Duesenoeffnung, ball_r = Kugelradius). Die Kugel ist groesser als die Oeffnung (~1.5x), liegt ON dem Gehaeuse und glueht ueber das Heck zurueck - bedeckt aber pro Stufe max. ~50% der Gehaeusebreite, die Gehaeuse-Front bleibt immer klar sichtbar, das Getriebe wird nie vollstaendig verdeckt. Hinter der Kugel laeuft der schlanke Kegel der Referenz spitz nach hinten aus.",
+   "note": "Gehaeuse = die alte Vorlage im natuerlichen, leicht gekippten Look (kein Redesign). Flamme = Referenz-Look (v1 Vorlage): kompakte Kegelflammen PRO Duese + vergroesserte Feuerkugel direkt am Ausgang, weiss-gluehender Kern, gesaettigter Rand, Pulsieren/Flackern + Partikel, ab Stufe 9 frame-variierender Energie-Blitz."
+  },
+  "desc": "Doppel-Linse: alte Vorlage, Kugel je Duese, zusammenlaufender Kegel (Tieforange)"
+ },
+ "4": {
+  "name": "engine_lvl04_twin_port_body_512x384.png",
+  "slug": "twin_port",
+  "body": "engine_lvl04_twin_port_body_512x384.png",
+  "flame": "engine_lvl04_twin_port_flame_8frames_512x384.png",
+  "special": false,
+  "anim": "steady",
+  "flame_palette": "blaze",
+  "frames": 8,
+  "fps": 12,
+  "cell": [
+   512,
+   384
+  ],
+  "layout": "vertical_stack",
+  "housing_source": "Original 04 - Twin Port (alte Vorlage)",
+  "anchor": {
+   "bell_exit_x": 208,
+   "flame_root_x": 180,
+   "flame_root_overlap": 28,
+   "max_covered_body_fraction": 0.31,
+   "hull_edge_x_recommended": 140,
+   "bank_cy": 192,
+   "mount_x": 119,
+   "body_w": 89,
+   "body_h": 88,
+   "bell_h": 64,
+   "nozzles": [
+    {
+     "cx": 197,
+     "cy": 186,
+     "ball_r": 16
+    },
+    {
+     "cx": 197,
+     "cy": 209,
+     "ball_r": 17
+    }
+   ]
+  },
+  "sprites": {
+   "draw_order": [
+    "engine_body",
+    "flame",
+    "ship_hull"
+   ],
+   "flame_sheet": "engine_lvl04_twin_port_flame_8frames_512x384.png",
+   "body_png": "engine_lvl04_twin_port_body_512x384.png",
+   "body_static": true,
+   "flame_on_top": true
+  },
+  "integration": {
+   "layer": "Gehaeuse ZUERST, Flamme DARUEBER (die Feuerkugeln liegen auf dem Gehaeuse), Rumpf ganz oben. Zeichnreihenfolge pro Frame: Gehaeuse -> Flamme -> Rumpf.",
+   "position": "Zelle x=140 (hull_edge_x_recommended) an die Heckkante des Rumpfs heften, Zelle y=192 an die Antriebs-Mittelachse; beide Sprites teilen dieselbe Zelle -> an derselben Position zeichnen. Die Gehaeuse sind so platziert, dass sie etwa zur Haelfte vom Rumpf verdeckt werden (Montageflansch links hinter dem Rumpf).",
+   "scale": "1.0 passt fuer Ruempfe von ~150-260 px Hoehe; beide Sprites mit demselben Faktor uniform skalieren.",
+   "flip": "Ausstoss zeigt nach RECHTS (Schiffe fliegen nach links); flip_h im Engine-Code fuer die andere Richtung.",
+   "animation": "Flame-Sheet looped bei 12 fps (8 Frames, loop-sicher); Gehaeuse-Sprite ist statisch (alte Vorlage, unveraenderlich).",
+   "overlap": "JE Duese bekommt ihre eigene runde Feuerkugel am Ausgang (anchor.nozzles: cx/cy = Duesenoeffnung, ball_r = Kugelradius). Die Kugel ist groesser als die Oeffnung (~1.5x), liegt ON dem Gehaeuse und glueht ueber das Heck zurueck - bedeckt aber pro Stufe max. ~50% der Gehaeusebreite, die Gehaeuse-Front bleibt immer klar sichtbar, das Getriebe wird nie vollstaendig verdeckt. Hinter der Kugel laeuft der schlanke Kegel der Referenz spitz nach hinten aus.",
+   "note": "Gehaeuse = die alte Vorlage im natuerlichen, leicht gekippten Look (kein Redesign). Flamme = Referenz-Look (v1 Vorlage): kompakte Kegelflammen PRO Duese + vergroesserte Feuerkugel direkt am Ausgang, weiss-gluehender Kern, gesaettigter Rand, Pulsieren/Flackern + Partikel, ab Stufe 9 frame-variierender Energie-Blitz."
+  },
+  "desc": "Twin-Port: alte Vorlage, Kugel je Duese, gemeinsamer Kegel (Orange-Rot)"
+ },
+ "5": {
+  "name": "engine_lvl05_tri_optic_body_512x384.png",
+  "slug": "tri_optic",
+  "body": "engine_lvl05_tri_optic_body_512x384.png",
+  "flame": "engine_lvl05_tri_optic_flame_8frames_512x384.png",
+  "special": false,
+  "anim": "steady",
+  "flame_palette": "azure",
+  "frames": 8,
+  "fps": 12,
+  "cell": [
+   512,
+   384
+  ],
+  "layout": "vertical_stack",
+  "housing_source": "Original 05 - Tri Optic (alte Vorlage)",
+  "anchor": {
+   "bell_exit_x": 220,
+   "flame_root_x": 175,
+   "flame_root_overlap": 45,
+   "max_covered_body_fraction": 0.42,
+   "hull_edge_x_recommended": 140,
+   "bank_cy": 192,
+   "mount_x": 113,
+   "body_w": 107,
+   "body_h": 86,
+   "bell_h": 37,
+   "nozzles": [
+    {
+     "cx": 201,
+     "cy": 187,
+     "ball_r": 16
+    },
+    {
+     "cx": 212,
+     "cy": 200,
+     "ball_r": 17
+    },
+    {
+     "cx": 191,
+     "cy": 213,
+     "ball_r": 16
+    }
+   ]
+  },
+  "sprites": {
+   "draw_order": [
+    "engine_body",
+    "flame",
+    "ship_hull"
+   ],
+   "flame_sheet": "engine_lvl05_tri_optic_flame_8frames_512x384.png",
+   "body_png": "engine_lvl05_tri_optic_body_512x384.png",
+   "body_static": true,
+   "flame_on_top": true
+  },
+  "integration": {
+   "layer": "Gehaeuse ZUERST, Flamme DARUEBER (die Feuerkugeln liegen auf dem Gehaeuse), Rumpf ganz oben. Zeichnreihenfolge pro Frame: Gehaeuse -> Flamme -> Rumpf.",
+   "position": "Zelle x=140 (hull_edge_x_recommended) an die Heckkante des Rumpfs heften, Zelle y=192 an die Antriebs-Mittelachse; beide Sprites teilen dieselbe Zelle -> an derselben Position zeichnen. Die Gehaeuse sind so platziert, dass sie etwa zur Haelfte vom Rumpf verdeckt werden (Montageflansch links hinter dem Rumpf).",
+   "scale": "1.0 passt fuer Ruempfe von ~150-260 px Hoehe; beide Sprites mit demselben Faktor uniform skalieren.",
+   "flip": "Ausstoss zeigt nach RECHTS (Schiffe fliegen nach links); flip_h im Engine-Code fuer die andere Richtung.",
+   "animation": "Flame-Sheet looped bei 12 fps (8 Frames, loop-sicher); Gehaeuse-Sprite ist statisch (alte Vorlage, unveraenderlich).",
+   "overlap": "JE Duese bekommt ihre eigene runde Feuerkugel am Ausgang (anchor.nozzles: cx/cy = Duesenoeffnung, ball_r = Kugelradius). Die Kugel ist groesser als die Oeffnung (~1.5x), liegt ON dem Gehaeuse und glueht ueber das Heck zurueck - bedeckt aber pro Stufe max. ~50% der Gehaeusebreite, die Gehaeuse-Front bleibt immer klar sichtbar, das Getriebe wird nie vollstaendig verdeckt. Hinter der Kugel laeuft der schlanke Kegel der Referenz spitz nach hinten aus.",
+   "note": "Gehaeuse = die alte Vorlage im natuerlichen, leicht gekippten Look (kein Redesign). Flamme = Referenz-Look (v1 Vorlage): kompakte Kegelflammen PRO Duese + vergroesserte Feuerkugel direkt am Ausgang, weiss-gluehender Kern, gesaettigter Rand, Pulsieren/Flackern + Partikel, ab Stufe 9 frame-variierender Energie-Blitz."
+  },
+  "desc": "Tri-Optik: alte Vorlage, 3 Kugeln + gefächerte Kegel (Blau)"
+ },
+ "6": {
+  "name": "engine_lvl06_thruster_block_body_512x384.png",
+  "slug": "thruster_block",
+  "body": "engine_lvl06_thruster_block_body_512x384.png",
+  "flame": "engine_lvl06_thruster_block_flame_8frames_512x384.png",
+  "special": true,
+  "anim": "steady",
+  "flame_palette": "indigo",
+  "frames": 8,
+  "fps": 12,
+  "cell": [
+   512,
+   384
+  ],
+  "layout": "vertical_stack",
+  "housing_source": "Original 06 - Thruster Block (alte Vorlage)",
+  "anchor": {
+   "bell_exit_x": 220,
+   "flame_root_x": 171,
+   "flame_root_overlap": 49,
+   "max_covered_body_fraction": 0.42,
+   "hull_edge_x_recommended": 140,
+   "bank_cy": 192,
+   "mount_x": 103,
+   "body_w": 117,
+   "body_h": 92,
+   "bell_h": 41,
+   "nozzles": [
+    {
+     "cx": 198,
+     "cy": 184,
+     "ball_r": 16
+    },
+    {
+     "cx": 209,
+     "cy": 201,
+     "ball_r": 16
+    },
+    {
+     "cx": 187,
+     "cy": 212,
+     "ball_r": 16
+    }
+   ]
+  },
+  "sprites": {
+   "draw_order": [
+    "engine_body",
+    "flame",
+    "ship_hull"
+   ],
+   "flame_sheet": "engine_lvl06_thruster_block_flame_8frames_512x384.png",
+   "body_png": "engine_lvl06_thruster_block_body_512x384.png",
+   "body_static": true,
+   "flame_on_top": true
+  },
+  "integration": {
+   "layer": "Gehaeuse ZUERST, Flamme DARUEBER (die Feuerkugeln liegen auf dem Gehaeuse), Rumpf ganz oben. Zeichnreihenfolge pro Frame: Gehaeuse -> Flamme -> Rumpf.",
+   "position": "Zelle x=140 (hull_edge_x_recommended) an die Heckkante des Rumpfs heften, Zelle y=192 an die Antriebs-Mittelachse; beide Sprites teilen dieselbe Zelle -> an derselben Position zeichnen. Die Gehaeuse sind so platziert, dass sie etwa zur Haelfte vom Rumpf verdeckt werden (Montageflansch links hinter dem Rumpf).",
+   "scale": "1.0 passt fuer Ruempfe von ~150-260 px Hoehe; beide Sprites mit demselben Faktor uniform skalieren.",
+   "flip": "Ausstoss zeigt nach RECHTS (Schiffe fliegen nach links); flip_h im Engine-Code fuer die andere Richtung.",
+   "animation": "Flame-Sheet looped bei 12 fps (8 Frames, loop-sicher); Gehaeuse-Sprite ist statisch (alte Vorlage, unveraenderlich).",
+   "overlap": "JE Duese bekommt ihre eigene runde Feuerkugel am Ausgang (anchor.nozzles: cx/cy = Duesenoeffnung, ball_r = Kugelradius). Die Kugel ist groesser als die Oeffnung (~1.5x), liegt ON dem Gehaeuse und glueht ueber das Heck zurueck - bedeckt aber pro Stufe max. ~50% der Gehaeusebreite, die Gehaeuse-Front bleibt immer klar sichtbar, das Getriebe wird nie vollstaendig verdeckt. Hinter der Kugel laeuft der schlanke Kegel der Referenz spitz nach hinten aus.",
+   "note": "Gehaeuse = die alte Vorlage im natuerlichen, leicht gekippten Look (kein Redesign). Flamme = Referenz-Look (v1 Vorlage): kompakte Kegelflammen PRO Duese + vergroesserte Feuerkugel direkt am Ausgang, weiss-gluehender Kern, gesaettigter Rand, Pulsieren/Flackern + Partikel, ab Stufe 9 frame-variierender Energie-Blitz."
+  },
+  "desc": "SPECIAL Schub-Block: alte Vorlage, 3 Kugeln + gefächerte Kegel (Blau-Weiss)"
+ },
+ "7": {
+  "name": "engine_lvl07_power_cell_body_512x384.png",
+  "slug": "power_cell",
+  "body": "engine_lvl07_power_cell_body_512x384.png",
+  "flame": "engine_lvl07_power_cell_flame_8frames_512x384.png",
+  "special": true,
+  "anim": "afterburn",
+  "flame_palette": "glacial",
+  "frames": 8,
+  "fps": 12,
+  "cell": [
+   512,
+   384
+  ],
+  "layout": "vertical_stack",
+  "housing_source": "Original 07 - Power Cell (alte Vorlage)",
+  "anchor": {
+   "bell_exit_x": 230,
+   "flame_root_x": 192,
+   "flame_root_overlap": 38,
+   "max_covered_body_fraction": 0.38,
+   "hull_edge_x_recommended": 140,
+   "bank_cy": 192,
+   "mount_x": 131,
+   "body_w": 99,
+   "body_h": 86,
+   "bell_h": 64,
+   "nozzles": [
+    {
+     "cx": 222,
+     "cy": 188,
+     "ball_r": 18
+    },
+    {
+     "cx": 211,
+     "cy": 215,
+     "ball_r": 19
+    }
+   ]
+  },
+  "sprites": {
+   "draw_order": [
+    "engine_body",
+    "flame",
+    "ship_hull"
+   ],
+   "flame_sheet": "engine_lvl07_power_cell_flame_8frames_512x384.png",
+   "body_png": "engine_lvl07_power_cell_body_512x384.png",
+   "body_static": true,
+   "flame_on_top": true
+  },
+  "integration": {
+   "layer": "Gehaeuse ZUERST, Flamme DARUEBER (die Feuerkugeln liegen auf dem Gehaeuse), Rumpf ganz oben. Zeichnreihenfolge pro Frame: Gehaeuse -> Flamme -> Rumpf.",
+   "position": "Zelle x=140 (hull_edge_x_recommended) an die Heckkante des Rumpfs heften, Zelle y=192 an die Antriebs-Mittelachse; beide Sprites teilen dieselbe Zelle -> an derselben Position zeichnen. Die Gehaeuse sind so platziert, dass sie etwa zur Haelfte vom Rumpf verdeckt werden (Montageflansch links hinter dem Rumpf).",
+   "scale": "1.0 passt fuer Ruempfe von ~150-260 px Hoehe; beide Sprites mit demselben Faktor uniform skalieren.",
+   "flip": "Ausstoss zeigt nach RECHTS (Schiffe fliegen nach links); flip_h im Engine-Code fuer die andere Richtung.",
+   "animation": "Flame-Sheet looped bei 12 fps (8 Frames, loop-sicher); Gehaeuse-Sprite ist statisch (alte Vorlage, unveraenderlich).",
+   "overlap": "JE Duese bekommt ihre eigene runde Feuerkugel am Ausgang (anchor.nozzles: cx/cy = Duesenoeffnung, ball_r = Kugelradius). Die Kugel ist groesser als die Oeffnung (~1.5x), liegt ON dem Gehaeuse und glueht ueber das Heck zurueck - bedeckt aber pro Stufe max. ~50% der Gehaeusebreite, die Gehaeuse-Front bleibt immer klar sichtbar, das Getriebe wird nie vollstaendig verdeckt. Hinter der Kugel laeuft der schlanke Kegel der Referenz spitz nach hinten aus.",
+   "note": "Gehaeuse = die alte Vorlage im natuerlichen, leicht gekippten Look (kein Redesign). Flamme = Referenz-Look (v1 Vorlage): kompakte Kegelflammen PRO Duese + vergroesserte Feuerkugel direkt am Ausgang, weiss-gluehender Kern, gesaettigter Rand, Pulsieren/Flackern + Partikel, ab Stufe 9 frame-variierender Energie-Blitz."
+  },
+  "desc": "SPECIAL Zellen-Antrieb: alte Vorlage, 2 Kugeln, Nachbrenner-Takt (Cyan)"
+ },
+ "8": {
+  "name": "engine_lvl08_ring_drive_body_512x384.png",
+  "slug": "ring_drive",
+  "body": "engine_lvl08_ring_drive_body_512x384.png",
+  "flame": "engine_lvl08_ring_drive_flame_8frames_512x384.png",
+  "special": true,
+  "anim": "rings",
+  "flame_palette": "ice",
+  "frames": 8,
+  "fps": 12,
+  "cell": [
+   512,
+   384
+  ],
+  "layout": "vertical_stack",
+  "housing_source": "Original 08 - Ring Drive (alte Vorlage)",
+  "anchor": {
+   "bell_exit_x": 230,
+   "flame_root_x": 180,
+   "flame_root_overlap": 50,
+   "max_covered_body_fraction": 0.49,
+   "hull_edge_x_recommended": 140,
+   "bank_cy": 192,
+   "mount_x": 127,
+   "body_w": 103,
+   "body_h": 86,
+   "bell_h": 50,
+   "nozzles": [
+    {
+     "cx": 211,
+     "cy": 198,
+     "ball_r": 31
+    }
+   ]
+  },
+  "sprites": {
+   "draw_order": [
+    "engine_body",
+    "flame",
+    "ship_hull"
+   ],
+   "flame_sheet": "engine_lvl08_ring_drive_flame_8frames_512x384.png",
+   "body_png": "engine_lvl08_ring_drive_body_512x384.png",
+   "body_static": true,
+   "flame_on_top": true
+  },
+  "integration": {
+   "layer": "Gehaeuse ZUERST, Flamme DARUEBER (die Feuerkugeln liegen auf dem Gehaeuse), Rumpf ganz oben. Zeichnreihenfolge pro Frame: Gehaeuse -> Flamme -> Rumpf.",
+   "position": "Zelle x=140 (hull_edge_x_recommended) an die Heckkante des Rumpfs heften, Zelle y=192 an die Antriebs-Mittelachse; beide Sprites teilen dieselbe Zelle -> an derselben Position zeichnen. Die Gehaeuse sind so platziert, dass sie etwa zur Haelfte vom Rumpf verdeckt werden (Montageflansch links hinter dem Rumpf).",
+   "scale": "1.0 passt fuer Ruempfe von ~150-260 px Hoehe; beide Sprites mit demselben Faktor uniform skalieren.",
+   "flip": "Ausstoss zeigt nach RECHTS (Schiffe fliegen nach links); flip_h im Engine-Code fuer die andere Richtung.",
+   "animation": "Flame-Sheet looped bei 12 fps (8 Frames, loop-sicher); Gehaeuse-Sprite ist statisch (alte Vorlage, unveraenderlich).",
+   "overlap": "JE Duese bekommt ihre eigene runde Feuerkugel am Ausgang (anchor.nozzles: cx/cy = Duesenoeffnung, ball_r = Kugelradius). Die Kugel ist groesser als die Oeffnung (~1.5x), liegt ON dem Gehaeuse und glueht ueber das Heck zurueck - bedeckt aber pro Stufe max. ~50% der Gehaeusebreite, die Gehaeuse-Front bleibt immer klar sichtbar, das Getriebe wird nie vollstaendig verdeckt. Hinter der Kugel laeuft der schlanke Kegel der Referenz spitz nach hinten aus.",
+   "note": "Gehaeuse = die alte Vorlage im natuerlichen, leicht gekippten Look (kein Redesign). Flamme = Referenz-Look (v1 Vorlage): kompakte Kegelflammen PRO Duese + vergroesserte Feuerkugel direkt am Ausgang, weiss-gluehender Kern, gesaettigter Rand, Pulsieren/Flackern + Partikel, ab Stufe 9 frame-variierender Energie-Blitz."
+  },
+  "desc": "SPECIAL Ring-Antrieb: alte Vorlage, grosse Kugel im Ringzentrum (Eis-Cyan)"
+ },
+ "9": {
+  "name": "engine_lvl09_piston_core_body_512x384.png",
+  "slug": "piston_core",
+  "body": "engine_lvl09_piston_core_body_512x384.png",
+  "flame": "engine_lvl09_piston_core_flame_8frames_512x384.png",
+  "special": true,
+  "anim": "pressure",
+  "flame_palette": "aurora",
+  "frames": 8,
+  "fps": 12,
+  "cell": [
+   512,
+   384
+  ],
+  "layout": "vertical_stack",
+  "housing_source": "Original 09 - Piston Core (alte Vorlage)",
+  "anchor": {
+   "bell_exit_x": 242,
+   "flame_root_x": 186,
+   "flame_root_overlap": 56,
+   "max_covered_body_fraction": 0.48,
+   "hull_edge_x_recommended": 140,
+   "bank_cy": 192,
+   "mount_x": 126,
+   "body_w": 116,
+   "body_h": 100,
+   "bell_h": 58,
+   "nozzles": [
+    {
+     "cx": 220,
+     "cy": 202,
+     "ball_r": 34
+    }
+   ]
+  },
+  "sprites": {
+   "draw_order": [
+    "engine_body",
+    "flame",
+    "ship_hull"
+   ],
+   "flame_sheet": "engine_lvl09_piston_core_flame_8frames_512x384.png",
+   "body_png": "engine_lvl09_piston_core_body_512x384.png",
+   "body_static": true,
+   "flame_on_top": true
+  },
+  "integration": {
+   "layer": "Gehaeuse ZUERST, Flamme DARUEBER (die Feuerkugeln liegen auf dem Gehaeuse), Rumpf ganz oben. Zeichnreihenfolge pro Frame: Gehaeuse -> Flamme -> Rumpf.",
+   "position": "Zelle x=140 (hull_edge_x_recommended) an die Heckkante des Rumpfs heften, Zelle y=192 an die Antriebs-Mittelachse; beide Sprites teilen dieselbe Zelle -> an derselben Position zeichnen. Die Gehaeuse sind so platziert, dass sie etwa zur Haelfte vom Rumpf verdeckt werden (Montageflansch links hinter dem Rumpf).",
+   "scale": "1.0 passt fuer Ruempfe von ~150-260 px Hoehe; beide Sprites mit demselben Faktor uniform skalieren.",
+   "flip": "Ausstoss zeigt nach RECHTS (Schiffe fliegen nach links); flip_h im Engine-Code fuer die andere Richtung.",
+   "animation": "Flame-Sheet looped bei 12 fps (8 Frames, loop-sicher); Gehaeuse-Sprite ist statisch (alte Vorlage, unveraenderlich).",
+   "overlap": "JE Duese bekommt ihre eigene runde Feuerkugel am Ausgang (anchor.nozzles: cx/cy = Duesenoeffnung, ball_r = Kugelradius). Die Kugel ist groesser als die Oeffnung (~1.5x), liegt ON dem Gehaeuse und glueht ueber das Heck zurueck - bedeckt aber pro Stufe max. ~50% der Gehaeusebreite, die Gehaeuse-Front bleibt immer klar sichtbar, das Getriebe wird nie vollstaendig verdeckt. Hinter der Kugel laeuft der schlanke Kegel der Referenz spitz nach hinten aus.",
+   "note": "Gehaeuse = die alte Vorlage im natuerlichen, leicht gekippten Look (kein Redesign). Flamme = Referenz-Look (v1 Vorlage): kompakte Kegelflammen PRO Duese + vergroesserte Feuerkugel direkt am Ausgang, weiss-gluehender Kern, gesaettigter Rand, Pulsieren/Flackern + Partikel, ab Stufe 9 frame-variierender Energie-Blitz."
+  },
+  "desc": "SPECIAL Kolben-Kern: alte Vorlage, Kugel im Ringzentrum, Druckstoss (Azur)"
+ },
+ "10": {
+  "name": "engine_lvl10_plasma_twin_body_512x384.png",
+  "slug": "plasma_twin",
+  "body": "engine_lvl10_plasma_twin_body_512x384.png",
+  "flame": "engine_lvl10_plasma_twin_flame_8frames_512x384.png",
+  "special": true,
+  "anim": "shimmer",
+  "flame_palette": "plasma",
+  "frames": 8,
+  "fps": 12,
+  "cell": [
+   512,
+   384
+  ],
+  "layout": "vertical_stack",
+  "housing_source": "Original 10 - Plasma Twin (alte Vorlage)",
+  "anchor": {
+   "bell_exit_x": 242,
+   "flame_root_x": 181,
+   "flame_root_overlap": 61,
+   "max_covered_body_fraction": 0.5,
+   "hull_edge_x_recommended": 140,
+   "bank_cy": 192,
+   "mount_x": 121,
+   "body_w": 121,
+   "body_h": 104,
+   "bell_h": 59,
+   "nozzles": [
+    {
+     "cx": 216,
+     "cy": 200,
+     "ball_r": 35
+    }
+   ]
+  },
+  "sprites": {
+   "draw_order": [
+    "engine_body",
+    "flame",
+    "ship_hull"
+   ],
+   "flame_sheet": "engine_lvl10_plasma_twin_flame_8frames_512x384.png",
+   "body_png": "engine_lvl10_plasma_twin_body_512x384.png",
+   "body_static": true,
+   "flame_on_top": true
+  },
+  "integration": {
+   "layer": "Gehaeuse ZUERST, Flamme DARUEBER (die Feuerkugeln liegen auf dem Gehaeuse), Rumpf ganz oben. Zeichnreihenfolge pro Frame: Gehaeuse -> Flamme -> Rumpf.",
+   "position": "Zelle x=140 (hull_edge_x_recommended) an die Heckkante des Rumpfs heften, Zelle y=192 an die Antriebs-Mittelachse; beide Sprites teilen dieselbe Zelle -> an derselben Position zeichnen. Die Gehaeuse sind so platziert, dass sie etwa zur Haelfte vom Rumpf verdeckt werden (Montageflansch links hinter dem Rumpf).",
+   "scale": "1.0 passt fuer Ruempfe von ~150-260 px Hoehe; beide Sprites mit demselben Faktor uniform skalieren.",
+   "flip": "Ausstoss zeigt nach RECHTS (Schiffe fliegen nach links); flip_h im Engine-Code fuer die andere Richtung.",
+   "animation": "Flame-Sheet looped bei 12 fps (8 Frames, loop-sicher); Gehaeuse-Sprite ist statisch (alte Vorlage, unveraenderlich).",
+   "overlap": "JE Duese bekommt ihre eigene runde Feuerkugel am Ausgang (anchor.nozzles: cx/cy = Duesenoeffnung, ball_r = Kugelradius). Die Kugel ist groesser als die Oeffnung (~1.5x), liegt ON dem Gehaeuse und glueht ueber das Heck zurueck - bedeckt aber pro Stufe max. ~50% der Gehaeusebreite, die Gehaeuse-Front bleibt immer klar sichtbar, das Getriebe wird nie vollstaendig verdeckt. Hinter der Kugel laeuft der schlanke Kegel der Referenz spitz nach hinten aus.",
+   "note": "Gehaeuse = die alte Vorlage im natuerlichen, leicht gekippten Look (kein Redesign). Flamme = Referenz-Look (v1 Vorlage): kompakte Kegelflammen PRO Duese + vergroesserte Feuerkugel direkt am Ausgang, weiss-gluehender Kern, gesaettigter Rand, Pulsieren/Flackern + Partikel, ab Stufe 9 frame-variierender Energie-Blitz."
+  },
+  "desc": "SPECIAL Plasma-Zwilling: alte Vorlage, Kugel + schimmerndes Plasma (Violett)"
+ },
+ "11": {
+  "name": "engine_lvl11_piston_core_mk2_body_512x384.png",
+  "slug": "piston_core_mk2",
+  "body": "engine_lvl11_piston_core_mk2_body_512x384.png",
+  "flame": "engine_lvl11_piston_core_mk2_flame_8frames_512x384.png",
+  "special": true,
+  "anim": "rings_diamonds",
+  "flame_palette": "nova",
+  "frames": 8,
+  "fps": 12,
+  "cell": [
+   512,
+   384
+  ],
+  "layout": "vertical_stack",
+  "housing_source": "Original 09 - Piston Core (Mk-II, alte Vorlage)",
+  "anchor": {
+   "bell_exit_x": 242,
+   "flame_root_x": 183,
+   "flame_root_overlap": 59,
+   "max_covered_body_fraction": 0.47,
+   "hull_edge_x_recommended": 140,
+   "bank_cy": 192,
+   "mount_x": 117,
+   "body_w": 125,
+   "body_h": 108,
+   "bell_h": 62,
+   "nozzles": [
+    {
+     "cx": 219,
+     "cy": 204,
+     "ball_r": 36
+    }
+   ]
+  },
+  "sprites": {
+   "draw_order": [
+    "engine_body",
+    "flame",
+    "ship_hull"
+   ],
+   "flame_sheet": "engine_lvl11_piston_core_mk2_flame_8frames_512x384.png",
+   "body_png": "engine_lvl11_piston_core_mk2_body_512x384.png",
+   "body_static": true,
+   "flame_on_top": true
+  },
+  "integration": {
+   "layer": "Gehaeuse ZUERST, Flamme DARUEBER (die Feuerkugeln liegen auf dem Gehaeuse), Rumpf ganz oben. Zeichnreihenfolge pro Frame: Gehaeuse -> Flamme -> Rumpf.",
+   "position": "Zelle x=140 (hull_edge_x_recommended) an die Heckkante des Rumpfs heften, Zelle y=192 an die Antriebs-Mittelachse; beide Sprites teilen dieselbe Zelle -> an derselben Position zeichnen. Die Gehaeuse sind so platziert, dass sie etwa zur Haelfte vom Rumpf verdeckt werden (Montageflansch links hinter dem Rumpf).",
+   "scale": "1.0 passt fuer Ruempfe von ~150-260 px Hoehe; beide Sprites mit demselben Faktor uniform skalieren.",
+   "flip": "Ausstoss zeigt nach RECHTS (Schiffe fliegen nach links); flip_h im Engine-Code fuer die andere Richtung.",
+   "animation": "Flame-Sheet looped bei 12 fps (8 Frames, loop-sicher); Gehaeuse-Sprite ist statisch (alte Vorlage, unveraenderlich).",
+   "overlap": "JE Duese bekommt ihre eigene runde Feuerkugel am Ausgang (anchor.nozzles: cx/cy = Duesenoeffnung, ball_r = Kugelradius). Die Kugel ist groesser als die Oeffnung (~1.5x), liegt ON dem Gehaeuse und glueht ueber das Heck zurueck - bedeckt aber pro Stufe max. ~50% der Gehaeusebreite, die Gehaeuse-Front bleibt immer klar sichtbar, das Getriebe wird nie vollstaendig verdeckt. Hinter der Kugel laeuft der schlanke Kegel der Referenz spitz nach hinten aus.",
+   "note": "Gehaeuse = die alte Vorlage im natuerlichen, leicht gekippten Look (kein Redesign). Flamme = Referenz-Look (v1 Vorlage): kompakte Kegelflammen PRO Duese + vergroesserte Feuerkugel direkt am Ausgang, weiss-gluehender Kern, gesaettigter Rand, Pulsieren/Flackern + Partikel, ab Stufe 9 frame-variierender Energie-Blitz."
+  },
+  "desc": "SPECIAL Kolben-Kern Mk-II: gleiche alte Vorlage, groessere Kugel (Magenta)"
+ },
+ "12": {
+  "name": "engine_lvl12_plasma_twin_apex_body_512x384.png",
+  "slug": "plasma_twin_apex",
+  "body": "engine_lvl12_plasma_twin_apex_body_512x384.png",
+  "flame": "engine_lvl12_plasma_twin_apex_flame_8frames_512x384.png",
+  "special": true,
+  "anim": "apex",
+  "flame_palette": "supernova",
+  "frames": 8,
+  "fps": 12,
+  "cell": [
+   512,
+   384
+  ],
+  "layout": "vertical_stack",
+  "housing_source": "Original 10 - Plasma Twin (Apex, alte Vorlage)",
+  "anchor": {
+   "bell_exit_x": 242,
+   "flame_root_x": 176,
+   "flame_root_overlap": 66,
+   "max_covered_body_fraction": 0.51,
+   "hull_edge_x_recommended": 140,
+   "bank_cy": 192,
+   "mount_x": 112,
+   "body_w": 130,
+   "body_h": 112,
+   "bell_h": 62,
+   "nozzles": [
+    {
+     "cx": 214,
+     "cy": 201,
+     "ball_r": 38
+    }
+   ]
+  },
+  "sprites": {
+   "draw_order": [
+    "engine_body",
+    "flame",
+    "ship_hull"
+   ],
+   "flame_sheet": "engine_lvl12_plasma_twin_apex_flame_8frames_512x384.png",
+   "body_png": "engine_lvl12_plasma_twin_apex_body_512x384.png",
+   "body_static": true,
+   "flame_on_top": true
+  },
+  "integration": {
+   "layer": "Gehaeuse ZUERST, Flamme DARUEBER (die Feuerkugeln liegen auf dem Gehaeuse), Rumpf ganz oben. Zeichnreihenfolge pro Frame: Gehaeuse -> Flamme -> Rumpf.",
+   "position": "Zelle x=140 (hull_edge_x_recommended) an die Heckkante des Rumpfs heften, Zelle y=192 an die Antriebs-Mittelachse; beide Sprites teilen dieselbe Zelle -> an derselben Position zeichnen. Die Gehaeuse sind so platziert, dass sie etwa zur Haelfte vom Rumpf verdeckt werden (Montageflansch links hinter dem Rumpf).",
+   "scale": "1.0 passt fuer Ruempfe von ~150-260 px Hoehe; beide Sprites mit demselben Faktor uniform skalieren.",
+   "flip": "Ausstoss zeigt nach RECHTS (Schiffe fliegen nach links); flip_h im Engine-Code fuer die andere Richtung.",
+   "animation": "Flame-Sheet looped bei 12 fps (8 Frames, loop-sicher); Gehaeuse-Sprite ist statisch (alte Vorlage, unveraenderlich).",
+   "overlap": "JE Duese bekommt ihre eigene runde Feuerkugel am Ausgang (anchor.nozzles: cx/cy = Duesenoeffnung, ball_r = Kugelradius). Die Kugel ist groesser als die Oeffnung (~1.5x), liegt ON dem Gehaeuse und glueht ueber das Heck zurueck - bedeckt aber pro Stufe max. ~50% der Gehaeusebreite, die Gehaeuse-Front bleibt immer klar sichtbar, das Getriebe wird nie vollstaendig verdeckt. Hinter der Kugel laeuft der schlanke Kegel der Referenz spitz nach hinten aus.",
+   "note": "Gehaeuse = die alte Vorlage im natuerlichen, leicht gekippten Look (kein Redesign). Flamme = Referenz-Look (v1 Vorlage): kompakte Kegelflammen PRO Duese + vergroesserte Feuerkugel direkt am Ausgang, weiss-gluehender Kern, gesaettigter Rand, Pulsieren/Flackern + Partikel, ab Stufe 9 frame-variierender Energie-Blitz."
+  },
+  "desc": "SPECIAL Plasma-Zwilling Apex: groesste Kugel, maximales Spektakel (Magenta)"
+ }
+}
