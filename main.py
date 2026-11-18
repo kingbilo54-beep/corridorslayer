@@ -1862,6 +1862,119 @@ def load_antrieb_image(level):
     return _generic_part_image(ANTRIEB_FOLDER, level)
 
 
+# Neue, levelgenau benannte Antriebs-Sprites aus antriebe/.
+# meta.json definiert Zellgroesse, Framezahl, FPS und Montageanker.
+ENGINE_SPRITE_FOLDER = _folder("antriebe", os.path.join(_BASE, "antriebe"))
+_engine_sprite_meta = None
+_engine_sprite_cache = {}
+
+
+def _load_engine_sprite_data(level):
+    global _engine_sprite_meta
+    lvl = max(1, min(12, int(level)))
+    if lvl in _engine_sprite_cache:
+        return _engine_sprite_cache[lvl]
+    try:
+        if _engine_sprite_meta is None:
+            with open(os.path.join(ENGINE_SPRITE_FOLDER, "meta.json"),
+                      "r", encoding="utf-8") as fh:
+                _engine_sprite_meta = json.load(fh)
+        info = _engine_sprite_meta[str(lvl)]
+        cell_w, cell_h = map(int, info.get("cell", (512, 384)))
+        frame_count = max(1, int(info.get("frames", 8)))
+        body = pygame.image.load(
+            os.path.join(ENGINE_SPRITE_FOLDER, info["body"])
+        ).convert_alpha()
+        sheet = pygame.image.load(
+            os.path.join(ENGINE_SPRITE_FOLDER, info["flame"])
+        ).convert_alpha()
+        if body.get_size() != (cell_w, cell_h):
+            raise ValueError(
+                f"Antrieb Level {lvl}: Body-Groesse {body.get_size()} "
+                f"statt {(cell_w, cell_h)}"
+            )
+        if sheet.get_width() != cell_w or sheet.get_height() < cell_h * frame_count:
+            raise ValueError(
+                f"Antrieb Level {lvl}: ungueltiges Flammen-Sheet "
+                f"{sheet.get_size()} fuer {frame_count} Frames"
+            )
+        frames = [
+            sheet.subsurface((0, i * cell_h, cell_w, cell_h)).copy()
+            for i in range(frame_count)
+        ]
+        data = {"info": info, "body": body, "frames": frames}
+        _engine_sprite_cache[lvl] = data
+        return data
+    except Exception as exc:
+        _log.warning("Neue Antriebsgrafik Level %s nicht ladbar: %s", lvl, exc)
+        return None
+
+
+def draw_engine_sprites(surface, level, hull_edge_pos, scale=1.0, angle=-45.0):
+    """Zeichnet Gehaeuse + animierte Flamme anhand der meta.json-Anker."""
+    data = _load_engine_sprite_data(level)
+    if data is None:
+        return False
+    info = data["info"]
+    anchor = info.get("anchor", {})
+    cell_w, cell_h = map(int, info.get("cell", (512, 384)))
+    fps = max(1, int(info.get("fps", 12)))
+    frames = data["frames"]
+    count = len(frames)
+
+    # Die Quelldateien stossen nach rechts aus; unser Schiff fliegt nach
+    # rechts. Horizontal spiegeln, damit die Flamme nach hinten links zeigt.
+    body = pygame.transform.flip(data["body"], True, False)
+    tick = int(pygame.time.get_ticks() * fps / 1000.0)
+    anim = str(info.get("anim", "steady")).lower()
+    if anim == "alternate" and count > 1:
+        period = 2 * count - 2
+        frame_index = tick % period
+        if frame_index >= count:
+            frame_index = period - frame_index
+    else:
+        frame_index = tick % count
+    flame = pygame.transform.flip(frames[frame_index], True, False)
+
+    s = max(0.1, float(scale))
+    if abs(s - 1.0) > 0.001:
+        size = (max(1, int(cell_w * s)), max(1, int(cell_h * s)))
+        body = pygame.transform.smoothscale(body, size)
+        flame = pygame.transform.smoothscale(flame, size)
+
+    # Nach dem horizontalen Spiegeln zeigt die lokale Schubachse nach
+    # links. Im Werft-Rumpf liegt die Nase rechts-unten und das Heck links-
+    # oben. -45 Grad in pygame richten die gespiegelte -X-Achse exakt auf
+    # dieses Heck aus. Der Winkel kommt aus WERFT_LAYOUT und kann je
+    # Schiffsstufe angepasst werden.
+    engine_angle = float(angle)
+    body = pygame.transform.rotate(body, engine_angle)
+    flame = pygame.transform.rotate(flame, engine_angle)
+
+    # Montageanker zuerst nach flip_h bestimmen und danach mit derselben
+    # Rotation wie die Sprites um deren Mittelpunkt transformieren.
+    hull_edge_x = int(anchor.get("hull_edge_x_recommended", 140))
+    bank_cy = int(anchor.get("bank_cy", cell_h // 2))
+    anchor_x = (cell_w - hull_edge_x) * s
+    anchor_y = bank_cy * s
+    src_w, src_h = cell_w * s, cell_h * s
+    dx = anchor_x - src_w / 2.0
+    dy = anchor_y - src_h / 2.0
+    rad = math.radians(engine_angle)
+    rotated_dx = math.cos(rad) * dx + math.sin(rad) * dy
+    rotated_dy = -math.sin(rad) * dx + math.cos(rad) * dy
+    rotated_anchor_x = body.get_width() / 2.0 + rotated_dx
+    rotated_anchor_y = body.get_height() / 2.0 + rotated_dy
+    left = int(round(hull_edge_pos[0] - rotated_anchor_x))
+    top = int(round(hull_edge_pos[1] - rotated_anchor_y))
+
+    # Laut Metadaten: Gehaeuse -> Flamme -> Schiffsrumpf.
+    surface.blit(body, (left, top))
+    surface.blit(flame, (left, top))
+    return True
+
+
+
 def load_hangar_image(level):
     """Hangar-PNG fuer die Werft (Level 1..12+ -> vorhandene Dateien)."""
     return _generic_part_image(HANGAR_FOLDER, level)
@@ -1934,10 +2047,11 @@ def load_kanonen_crop(level):
 # ---------------------------------------------------------------------
 # WERFT-LAYOUT: Positionen/Groessen RELATIV zum Schiffsrechteck.
 # Key = geladenes Schiffs-Bild (fortress.level, naechstniedrigere Stufe).
-#   engine  : (ux, uy) MITTE des Antriebsblocks - der Rumpf verdeckt den
-#             vorderen (rechtseiligen) Teil, die Duesen ragen nach
-#             links/oben aus dem Heck heraus.
-#   engine_w: Antriebsbreite als Anteil der Schiffs-BREITE.
+#   engine  : (ux, uy) HULL-ANSCHLUSSPUNKT des Antriebs; hier trifft
+#             hull_edge_x_recommended aus meta.json auf die Heckkante.
+#   engine_w: sichtbare Gehaeusebreite als Anteil der Schiffs-BREITE.
+#   engine_angle: Pygame-Drehwinkel nach horizontalem Spiegeln
+#             (Standard -45 Grad: Schubachse zeigt links-oben).
 #   radar   : (ux, uy) FUSSPUNKT der Radarantenne (midbottom-Anker) auf
 #             dem Heckaufbau; radar_h = Zielhoehe als Anteil der
 #             Schiffs-HOEHE (klein! feste Schiffsantenne, kein Funkturm).
@@ -1958,6 +2072,7 @@ def load_kanonen_crop(level):
 # ---------------------------------------------------------------------
 WERFT_LAYOUT_DEFAULT = {
     "engine": (0.075, 0.155), "engine_w": 0.30,
+    "engine_angle": -45.0,
     "radar": (0.235, 0.135), "radar_h": 0.185,
     "hangar": (0.545, 0.465), "hangar_w": 0.205, "hangar_hmax": 0.30,
     "drone_w": 0.085,
@@ -4428,16 +4543,26 @@ class Game:
             pygame.draw.ellipse(sh, (0, 0, 0, 78), (0, 0, w, h))
             SCREEN.blit(sh, (int(cx - w / 2), int(cy - h / 2)))
 
-        # --- 1) ANTRIEB: HINTER dem Rumpf (Rumpf verdeckt ihn teilweise) ---
-        eng = load_antrieb_image(self.modules.get("antrieb").level)
-        if eng is not None:
-            # Duesen der Asset-Grafiken zeigen nach rechts -> 180 Grad,
-            # damit der Abgasstrom wie im Gefecht (EngineEffect) nach
-            # links/oben aus dem Heck weist.
-            eng_rot = pygame.transform.rotate(eng, lay.get("engine_rot", 180))
-            eng_s = scale_w(eng_rot, lay.get("engine_w", 0.30) * ship_draw.w)
-            ex, ey = P(lay.get("engine", (0.075, 0.155)))
-            SCREEN.blit(eng_s, eng_s.get_rect(center=(ex, ey)))
+        # --- 1) ANTRIEB: Gehaeuse + animierte Flamme HINTER dem Rumpf ---
+        # Beide Ebenen teilen denselben metadata-definierten Heckanker.
+        # Der Rumpf wird danach darueber gezeichnet und verdeckt den
+        # Montageflansch; die Flamme bleibt als Animation sichtbar.
+        ex, ey = P(lay.get("engine", (0.075, 0.155)))
+        engine_level = self.modules.get("antrieb").level
+        engine_data = _load_engine_sprite_data(engine_level)
+        engine_anchor = (engine_data or {}).get("info", {}).get("anchor", {})
+        # engine_w ist die gewuenschte Gehaeusebreite relativ zur
+        # Schiffsbreite; body_w stammt aus meta.json.
+        source_body_w = max(1.0, float(engine_anchor.get("body_w", 116.0)))
+        target_body_w = max(1.0, float(lay.get("engine_w", 0.30)) * ship_draw.w)
+        engine_scale = max(0.15, min(3.0, target_body_w / source_body_w))
+        engine_angle = float(lay.get(
+            "engine_angle", WERFT_LAYOUT_DEFAULT["engine_angle"]
+        ))
+        draw_engine_sprites(
+            SCREEN, engine_level, (ex, ey),
+            scale=engine_scale, angle=engine_angle
+        )
 
         # --- 2) SCHIFFSRUMPF (verdeckt den vorderen Antriebsteil) ---
         if base is not None:
