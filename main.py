@@ -1862,14 +1862,18 @@ def load_antrieb_image(level):
     return _generic_part_image(ANTRIEB_FOLDER, level)
 
 
-# Neue, levelgenau benannte Antriebs-Sprites aus antriebe/.
-# meta.json definiert Zellgroesse, Framezahl, FPS und Montageanker.
-ENGINE_SPRITE_FOLDER = _folder("antriebe", os.path.join(_BASE, "antriebe"))
+# Neue, levelgenau benannte Antriebs-Sprites (Ebenen-Export LVL 1-12).
+# Die Quelldateien sind bereits korrekt ausgerichtet: Flamme oben-links,
+# Gehaeuse unten-rechts. Deshalb KEIN horizontales Spiegeln.
+ENGINE_SPRITE_FOLDER = os.path.join(
+    _BASE, "antriebe", "Antriebsgrafiken_LVL1-12"
+)
 _engine_sprite_meta = None
 _engine_sprite_cache = {}
 
 
 def _load_engine_sprite_data(level):
+    """Laedt Body sowie 8 Flame-/Glow-Frames aus dem Ebenen-Export."""
     global _engine_sprite_meta
     lvl = max(1, min(12, int(level)))
     if lvl in _engine_sprite_cache:
@@ -1879,30 +1883,57 @@ def _load_engine_sprite_data(level):
             with open(os.path.join(ENGINE_SPRITE_FOLDER, "meta.json"),
                       "r", encoding="utf-8") as fh:
                 _engine_sprite_meta = json.load(fh)
-        info = _engine_sprite_meta[str(lvl)]
-        cell_w, cell_h = map(int, info.get("cell", (512, 384)))
-        frame_count = max(1, int(info.get("frames", 8)))
-        body = pygame.image.load(
-            os.path.join(ENGINE_SPRITE_FOLDER, info["body"])
-        ).convert_alpha()
-        sheet = pygame.image.load(
-            os.path.join(ENGINE_SPRITE_FOLDER, info["flame"])
-        ).convert_alpha()
-        if body.get_size() != (cell_w, cell_h):
-            raise ValueError(
-                f"Antrieb Level {lvl}: Body-Groesse {body.get_size()} "
-                f"statt {(cell_w, cell_h)}"
-            )
-        if sheet.get_width() != cell_w or sheet.get_height() < cell_h * frame_count:
-            raise ValueError(
-                f"Antrieb Level {lvl}: ungueltiges Flammen-Sheet "
-                f"{sheet.get_size()} fuer {frame_count} Frames"
-            )
-        frames = [
-            sheet.subsurface((0, i * cell_h, cell_w, cell_h)).copy()
-            for i in range(frame_count)
-        ]
-        data = {"info": info, "body": body, "frames": frames}
+
+        meta = _engine_sprite_meta
+        info = meta["stufen"][str(lvl)]
+        cell_w = int(meta["zelle"]["breite"])
+        cell_h = int(meta["zelle"]["hoehe"])
+        frame_count = max(1, int(info.get("frames", meta["zelle"]["frames"])))
+        fps = max(1, int(info.get("fps", meta["zelle"]["fps"])))
+        prefix = f"engine_lvl{lvl:02d}"
+        layer_dir = os.path.join(ENGINE_SPRITE_FOLDER, "ebenen")
+
+        body = pygame.image.load(os.path.join(
+            layer_dir, f"{prefix}_body_512x384.png"
+        )).convert_alpha()
+        flame_sheet = pygame.image.load(os.path.join(
+            layer_dir, f"{prefix}_flame_8frames_512x384.png"
+        )).convert_alpha()
+        glow_sheet = pygame.image.load(os.path.join(
+            layer_dir, f"{prefix}_glow_8frames_512x384.png"
+        )).convert_alpha()
+
+        expected = (cell_w, cell_h)
+        if body.get_size() != expected:
+            raise ValueError(f"Body-Groesse {body.get_size()} statt {expected}")
+        for label, sheet in (("Flamme", flame_sheet), ("Glow", glow_sheet)):
+            if (sheet.get_width() != cell_w or
+                    sheet.get_height() < cell_h * frame_count):
+                raise ValueError(
+                    f"{label}-Sheet {sheet.get_size()} ungueltig fuer "
+                    f"{frame_count} Frames"
+                )
+
+        def split_frames(sheet):
+            return [
+                sheet.subsurface((0, i * cell_h, cell_w, cell_h)).copy()
+                for i in range(frame_count)
+            ]
+
+        anchor = tuple(map(float, info.get("anchor", meta["anker"]["position"])))
+        data = {
+            "info": {
+                "cell": (cell_w, cell_h),
+                "frames": frame_count,
+                "fps": fps,
+                "anchor": {"position": anchor},
+                "scale": float(info.get("scale", 0.2635)),
+                "body_diag_final": float(info.get("body_diag_final", 92.9)),
+            },
+            "body": body,
+            "frames": split_frames(flame_sheet),
+            "glow_frames": split_frames(glow_sheet),
+        }
         _engine_sprite_cache[lvl] = data
         return data
     except Exception as exc:
@@ -1910,69 +1941,52 @@ def _load_engine_sprite_data(level):
         return None
 
 
-def draw_engine_sprites(surface, level, hull_edge_pos, scale=1.0, angle=-45.0):
-    """Zeichnet Gehaeuse + animierte Flamme anhand der meta.json-Anker."""
+def draw_engine_sprites(surface, level, hull_edge_pos, scale=1.0, angle=0.0):
+    """Zeichnet Glow + Flamme + Gehaeuse mit gemeinsamem Koerperanker."""
     data = _load_engine_sprite_data(level)
     if data is None:
         return False
+
     info = data["info"]
-    anchor = info.get("anchor", {})
-    cell_w, cell_h = map(int, info.get("cell", (512, 384)))
-    fps = max(1, int(info.get("fps", 12)))
-    frames = data["frames"]
-    count = len(frames)
-
-    # Die Quelldateien stossen nach rechts aus; unser Schiff fliegt nach
-    # rechts. Horizontal spiegeln, damit die Flamme nach hinten links zeigt.
-    body = pygame.transform.flip(data["body"], True, False)
-    tick = int(pygame.time.get_ticks() * fps / 1000.0)
-    anim = str(info.get("anim", "steady")).lower()
-    if anim == "alternate" and count > 1:
-        period = 2 * count - 2
-        frame_index = tick % period
-        if frame_index >= count:
-            frame_index = period - frame_index
-    else:
-        frame_index = tick % count
-    flame = pygame.transform.flip(frames[frame_index], True, False)
-
-    s = max(0.1, float(scale))
-    if abs(s - 1.0) > 0.001:
-        size = (max(1, int(cell_w * s)), max(1, int(cell_h * s)))
-        body = pygame.transform.smoothscale(body, size)
-        flame = pygame.transform.smoothscale(flame, size)
-
-    # Nach dem horizontalen Spiegeln zeigt die lokale Schubachse nach
-    # links. Im Werft-Rumpf liegt die Nase rechts-unten und das Heck links-
-    # oben. -45 Grad in pygame richten die gespiegelte -X-Achse exakt auf
-    # dieses Heck aus. Der Winkel kommt aus WERFT_LAYOUT und kann je
-    # Schiffsstufe angepasst werden.
+    cell_w, cell_h = info["cell"]
+    count = len(data["frames"])
+    frame_index = int(pygame.time.get_ticks() * info["fps"] / 1000.0) % count
+    layers = (
+        data["glow_frames"][frame_index],
+        data["frames"][frame_index],
+        data["body"],
+    )
+    s = max(0.02, float(scale))
     engine_angle = float(angle)
-    body = pygame.transform.rotate(body, engine_angle)
-    flame = pygame.transform.rotate(flame, engine_angle)
+    anchor_x, anchor_y = info["anchor"]["position"]
 
-    # Montageanker zuerst nach flip_h bestimmen und danach mit derselben
-    # Rotation wie die Sprites um deren Mittelpunkt transformieren.
-    hull_edge_x = int(anchor.get("hull_edge_x_recommended", 140))
-    bank_cy = int(anchor.get("bank_cy", cell_h // 2))
-    anchor_x = (cell_w - hull_edge_x) * s
-    anchor_y = bank_cy * s
+    transformed = []
+    for layer in layers:
+        image = layer
+        if abs(s - 1.0) > 0.001:
+            size = (max(1, int(cell_w * s)), max(1, int(cell_h * s)))
+            image = pygame.transform.smoothscale(image, size)
+        if abs(engine_angle) > 0.001:
+            image = pygame.transform.rotate(image, engine_angle)
+        transformed.append(image)
+
+    # Derselbe lokale Anker wird mit derselben Skalierung/Rotation
+    # transformiert wie die drei Bildebenen.
     src_w, src_h = cell_w * s, cell_h * s
-    dx = anchor_x - src_w / 2.0
-    dy = anchor_y - src_h / 2.0
+    dx = anchor_x * s - src_w / 2.0
+    dy = anchor_y * s - src_h / 2.0
     rad = math.radians(engine_angle)
     rotated_dx = math.cos(rad) * dx + math.sin(rad) * dy
     rotated_dy = -math.sin(rad) * dx + math.cos(rad) * dy
-    rotated_anchor_x = body.get_width() / 2.0 + rotated_dx
-    rotated_anchor_y = body.get_height() / 2.0 + rotated_dy
-    left = int(round(hull_edge_pos[0] - rotated_anchor_x))
-    top = int(round(hull_edge_pos[1] - rotated_anchor_y))
+    anchor_screen_x = transformed[-1].get_width() / 2.0 + rotated_dx
+    anchor_screen_y = transformed[-1].get_height() / 2.0 + rotated_dy
+    left = int(round(hull_edge_pos[0] - anchor_screen_x))
+    top = int(round(hull_edge_pos[1] - anchor_screen_y))
 
-    # Laut Metadaten: Gehaeuse -> Flamme -> Schiffsrumpf.
-    surface.blit(body, (left, top))
-    surface.blit(flame, (left, top))
+    # Export-Vorgabe: Glow und Flamme liegen hinter dem festen Gehaeuse.
+    for image in transformed:
+        surface.blit(image, (left, top))
     return True
-
 
 
 def load_hangar_image(level):
@@ -2072,7 +2086,7 @@ def load_kanonen_crop(level):
 # ---------------------------------------------------------------------
 WERFT_LAYOUT_DEFAULT = {
     "engine": (0.075, 0.155), "engine_w": 0.30,
-    "engine_angle": -45.0,
+    "engine_angle": 0.0,
     "radar": (0.235, 0.135), "radar_h": 0.185,
     "hangar": (0.545, 0.465), "hangar_w": 0.205, "hangar_hmax": 0.30,
     "drone_w": 0.085,
@@ -4550,12 +4564,15 @@ class Game:
         ex, ey = P(lay.get("engine", (0.075, 0.155)))
         engine_level = self.modules.get("antrieb").level
         engine_data = _load_engine_sprite_data(engine_level)
-        engine_anchor = (engine_data or {}).get("info", {}).get("anchor", {})
-        # engine_w ist die gewuenschte Gehaeusebreite relativ zur
-        # Schiffsbreite; body_w stammt aus meta.json.
-        source_body_w = max(1.0, float(engine_anchor.get("body_w", 116.0)))
+        engine_info = (engine_data or {}).get("info", {})
+        # meta.scale erzeugt die vorgesehene Groessenprogression LVL 1-12.
+        # engine_w skaliert diese Progression relativ zur Schiffsgroesse.
         target_body_w = max(1.0, float(lay.get("engine_w", 0.30)) * ship_draw.w)
-        engine_scale = max(0.15, min(3.0, target_body_w / source_body_w))
+        reference_diag = max(1.0, float(engine_info.get("body_diag_final", 92.9)))
+        base_scale = float(engine_info.get("scale", 0.2635))
+        engine_scale = max(0.02, min(2.0,
+            base_scale * target_body_w / reference_diag
+        ))
         engine_angle = float(lay.get(
             "engine_angle", WERFT_LAYOUT_DEFAULT["engine_angle"]
         ))
@@ -5084,10 +5101,18 @@ class Game:
             pygame.draw.circle(SCREEN, (0, 255, 255), (int(sx), int(sy)), int(rad + pulse), 2)
             pygame.draw.circle(SCREEN, (0, 180, 200), (int(sx), int(sy)), int(rad + pulse + 5 * s), 1)
 
-        # PAKET 7E: Triebwerks-FX - JETZT zeichnen, ueber dem Schildring
-        # (Grund siehe Kommentar oben). Der Strahl laeuft vom Heck nach
-        # links aus und liegt damit nie unter der Schild-Grafik.
-        self.engine_effect.draw(SCREEN)
+        # Neue levelgenaue Triebwerksgrafik in Idle UND Kampagne.
+        # Sie sitzt hinter dem Rumpf; der Rumpf wird direkt danach darueber
+        # gezeichnet. Der prozedurale Effekt bleibt als sicherer Fallback.
+        engine_lvl = self.modules.get("antrieb").level
+        engine_data = _load_engine_sprite_data(engine_lvl)
+        engine_info = (engine_data or {}).get("info", {})
+        engine_scale = float(engine_info.get("scale", 0.2635)) * 0.50 * s
+        if not draw_engine_sprites(
+            SCREEN, engine_lvl, (ex, ey),
+            scale=engine_scale, angle=angle
+        ):
+            self.engine_effect.draw(SCREEN)
 
         base = getattr(self.fortress, "_base_image", None)
         if base:
