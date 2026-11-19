@@ -4347,7 +4347,8 @@ class Game:
         return ui
 
     def _layout_defeat(self):
-        """Video antippen = ueberspringen; danach zwei klare Entscheidungen."""
+        """Video antippen = ueberspringen; Aktionen liegen danach direkt
+        auf dem letzten Videobild - kein separater Defeat-Zwischenscreen."""
         W, H = ui_kit.W, ui_kit.H
         full = len(self.defeat_frames) / 30.0 if self.defeat_frames else 0.0
         if self.defeat_frames and self.defeat_timer < full:
@@ -4355,9 +4356,9 @@ class Game:
 
         bw = int(W * 0.40)
         gap = u(16)
-        bh = int(btn_h() * 1.35)
+        bh = int(btn_h() * 1.25)
         x0 = (W - (bw * 2 + gap)) // 2
-        y = int(H * 0.64)
+        y = int(H * 0.78)
         return {
             "def_restart": Btn("def_restart",
                                pygame.Rect(x0, y, bw, bh),
@@ -5548,29 +5549,23 @@ class Game:
         return timer >= full
 
     def draw_defeat(self):
-        """Defeat-Video; danach direkt die Auswahl Neustart oder Startseite."""
+        """Defeat-Video; Aktionen erscheinen auf dem letzten Videobild."""
         self._ui = self._layout_defeat()
         full = len(self.defeat_frames) / 30.0 if self.defeat_frames else 0.0
-        if self.defeat_frames and self.defeat_timer < full:
-            self._video_overlay(self.defeat_frames, self.defeat_timer)
-            return
 
-        # Kein zusaetzlicher "SCHIFF ZERSTOERT"-Zwischenscreen und kein
-        # automatischer Neustart: nur die zwei expliziten Aktionen.
-        W, H = ui_kit.W, ui_kit.H
-        SCREEN.fill((5, 7, 18))
-        glow = radial_glow_k((150, 24, 42), max(90, u(230)), 0.18)
-        SCREEN.blit(glow, glow.get_rect(center=(W // 2, int(H * 0.39))),
-                    special_flags=pygame.BLEND_ADD)
-        panel = pygame.Rect(int(W * 0.12), int(H * 0.22),
-                            int(W * 0.76), int(H * 0.58))
-        glass_panel(SCREEN, panel, accent=RED, radius=u(16), alpha=224, width=2)
-        neon_text(SCREEN, "MISSION GESCHEITERT", F(21), RED,
-                  (W // 2, int(H * 0.34)), "center", 2)
-        neon_text(SCREEN, "WIE MÖCHTEST DU FORTFAHREN?", F(11), MUTED,
-                  (W // 2, int(H * 0.48)), "center", 1)
-        for bid, b in self._ui.items():
-            draw_compact_btn(SCREEN, b, pressed=self._pressed(bid))
+        if self.defeat_frames:
+            # Auch nach Ablauf bleibt das letzte Videobild sichtbar.
+            # Kein neues Fenster, kein separater Hintergrund und kein Panel.
+            self._video_overlay(self.defeat_frames,
+                                min(self.defeat_timer, full))
+        else:
+            SCREEN.fill((5, 7, 18))
+
+        # Nach Videoende bzw. Tap nur die zwei Aktionen direkt ueber dem
+        # eingefrorenen Bild anzeigen.
+        if not self.defeat_frames or self.defeat_timer >= full:
+            for bid, b in self._ui.items():
+                draw_compact_btn(SCREEN, b, pressed=self._pressed(bid))
 
     def draw_stage_clear(self):
         """AUFTRAG 20 (PUNKT 3): Sieg-Screen mit ETAPPEN-UEBERSICHT -
