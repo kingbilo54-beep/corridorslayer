@@ -1,12 +1,13 @@
 {
- "projekt": "Antriebsgrafiken LVL 1-12 (nach Benutzer-Referenzbildern)",
+ "projekt": "Antriebsgrafiken LVL 1-15 (LVL 1-9 unverändert aus Benutzer-Referenz; LVL 10-15 ueberarbeitet: groessere Koerper, neue Flammen mit Feuerkugel, Glow; LVL 13-15 originalgetreu aus graphics levels 13-15.jpg)",
  "zelle": {
   "breite": 512,
   "hoehe": 384,
   "frames": 8,
   "fps": 12,
   "loop": "nahtlos",
-  "stapel": "vertikal (512x3072 je Atlas)"
+  "stapel": "vertikal (512x3072 je Atlas)",
+  "stufen_gesamt": 15
  },
  "anker": {
   "typ": "koerperzentrum",
@@ -213,19 +214,22 @@
     336,
     200
    ],
-   "body_diag_src": 568.8,
-   "body_diag_final": 149.9,
+   "body_diag_src": 544.8,
+   "body_diag_final": 299.0,
    "flame_root_canvas": [
-    417,
-    251
+    336,
+    200
    ],
    "flame_rgb": [
-    104,
-    159,
-    215
+    91,
+    158,
+    255
    ],
    "frames": 8,
-   "fps": 12
+   "fps": 12,
+   "flame_axis_deg": 40,
+   "flame_reach_visible": 195,
+   "quelle": "Referenz-Sprite (hochaufgeloest)"
   },
   "11": {
    "tag": "H1",
@@ -234,19 +238,22 @@
     336,
     200
    ],
-   "body_diag_src": 1034.3,
-   "body_diag_final": 272.5,
+   "body_diag_src": 953.0,
+   "body_diag_final": 348.6,
    "flame_root_canvas": [
-    407,
-    161
+    336,
+    200
    ],
    "flame_rgb": [
-    96,
-    158,
-    202
+    94,
+    155,
+    255
    ],
    "frames": 8,
-   "fps": 12
+   "fps": 12,
+   "flame_axis_deg": 38,
+   "flame_reach_visible": 200,
+   "quelle": "Referenz-Sprite (hochaufgeloest)"
   },
   "12": {
    "tag": "H2",
@@ -255,19 +262,94 @@
     336,
     200
    ],
-   "body_diag_src": 1214.6,
-   "body_diag_final": 320.0,
+   "body_diag_src": 1115.1,
+   "body_diag_final": 393.1,
    "flame_root_canvas": [
-    222,
-    169
+    336,
+    200
    ],
    "flame_rgb": [
-    97,
-    168,
-    222
+    112,
+    142,
+    255
    ],
    "frames": 8,
-   "fps": 12
+   "fps": 12,
+   "flame_axis_deg": 36,
+   "flame_reach_visible": 185,
+   "quelle": "Referenz-Sprite (hochaufgeloest)"
+  },
+  "13": {
+   "tag": "N1",
+   "scale": 0.2635,
+   "anchor": [
+    336,
+    200
+   ],
+   "body_diag_src": 726.3,
+   "body_diag_final": 418.6,
+   "flame_root_canvas": [
+    336,
+    200
+   ],
+   "flame_rgb": [
+    117,
+    127,
+    255
+   ],
+   "frames": 8,
+   "fps": 12,
+   "flame_axis_deg": 34,
+   "flame_reach_visible": 192,
+   "quelle": "Original-Trennung graphics levels 13-15.jpg"
+  },
+  "14": {
+   "tag": "N2",
+   "scale": 0.2635,
+   "anchor": [
+    336,
+    200
+   ],
+   "body_diag_src": 626.3,
+   "body_diag_final": 434.4,
+   "flame_root_canvas": [
+    336,
+    200
+   ],
+   "flame_rgb": [
+    96,
+    168,
+    255
+   ],
+   "frames": 8,
+   "fps": 12,
+   "flame_axis_deg": 32,
+   "flame_reach_visible": 268,
+   "quelle": "Original-Trennung graphics levels 13-15.jpg"
+  },
+  "15": {
+   "tag": "N3",
+   "scale": 0.2635,
+   "anchor": [
+    336,
+    200
+   ],
+   "body_diag_src": 801.4,
+   "body_diag_final": 459.1,
+   "flame_root_canvas": [
+    336,
+    200
+   ],
+   "flame_rgb": [
+    140,
+    112,
+    249
+   ],
+   "frames": 8,
+   "fps": 12,
+   "flame_axis_deg": 30,
+   "flame_reach_visible": 230,
+   "quelle": "Original-Trennung graphics levels 13-15.jpg"
   }
  },
  "dateien": {
@@ -345,5 +427,6 @@
   "Bodenschatten der Referenz entfernt (transparenter Hintergrund gefordert).",
   "Flammen animate: radiale Deformation um die Flammenwurzel + Helligkeitspuls, Design 1:1 aus der Referenz.",
   "Glow-Ebene: weiches, pulsierendes Flammenleuchten, abgeleitet aus der jeweiligen Flammenfarbe."
- ]
+ ],
+ "stufen_13_15_quelle": "antriebe/Antriebsgrafiken_LVL1-12/graphics levels 13-15.jpg (Watershed-/Achsen-Separation, originalgetreu)"
 }
