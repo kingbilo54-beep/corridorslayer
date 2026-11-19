@@ -1883,7 +1883,7 @@ _engine_sprite_cache = {}
 def _load_engine_sprite_data(level):
     """Laedt Body sowie 8 Flame-/Glow-Frames aus dem Ebenen-Export."""
     global _engine_sprite_meta
-    lvl = max(1, min(12, int(level)))
+    lvl = max(1, min(15, int(level)))
     if lvl in _engine_sprite_cache:
         return _engine_sprite_cache[lvl]
     try:
