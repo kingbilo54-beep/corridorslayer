@@ -1950,7 +1950,7 @@ def _load_engine_sprite_data(level):
 
 
 def draw_engine_sprites(surface, level, hull_edge_pos, scale=1.0, angle=0.0):
-    """Zeichnet Glow + Flamme + Gehaeuse mit gemeinsamem Koerperanker."""
+    """Zeichnet einen vergroesserten Antrieb mit separat skaliertem Glow/Plasma."""
     data = _load_engine_sprite_data(level)
     if data is None:
         return False
@@ -1959,41 +1959,44 @@ def draw_engine_sprites(surface, level, hull_edge_pos, scale=1.0, angle=0.0):
     cell_w, cell_h = info["cell"]
     count = len(data["frames"])
     frame_index = int(pygame.time.get_ticks() * info["fps"] / 1000.0) % count
-    layers = (
-        data["glow_frames"][frame_index],
-        data["frames"][frame_index],
-        data["body"],
-    )
-    s = max(0.02, float(scale))
+    base_scale = max(0.02, float(scale))
     engine_angle = float(angle)
     anchor_x, anchor_y = info["anchor"]["position"]
 
-    transformed = []
-    for layer in layers:
+    # Die Ebenen wachsen bewusst unterschiedlich: Das Gehaeuse wird
+    # praesenter, die Plasmaflamme deutlich laenger und der Glow breiter.
+    # Alle Ebenen behalten denselben Koerperanker am Schiff.
+    layers = (
+        (data["glow_frames"][frame_index], base_scale * 2.00),
+        (data["frames"][frame_index], base_scale * 1.80),
+        (data["body"], base_scale * 1.40),
+    )
+    rad = math.radians(engine_angle)
+    cos_a, sin_a = math.cos(rad), math.sin(rad)
+
+    for layer, layer_scale in layers:
+        size = (
+            max(1, int(round(cell_w * layer_scale))),
+            max(1, int(round(cell_h * layer_scale))),
+        )
         image = layer
-        if abs(s - 1.0) > 0.001:
-            size = (max(1, int(cell_w * s)), max(1, int(cell_h * s)))
+        if image.get_size() != size:
             image = pygame.transform.smoothscale(image, size)
         if abs(engine_angle) > 0.001:
             image = pygame.transform.rotate(image, engine_angle)
-        transformed.append(image)
 
-    # Derselbe lokale Anker wird mit derselben Skalierung/Rotation
-    # transformiert wie die drei Bildebenen.
-    src_w, src_h = cell_w * s, cell_h * s
-    dx = anchor_x * s - src_w / 2.0
-    dy = anchor_y * s - src_h / 2.0
-    rad = math.radians(engine_angle)
-    rotated_dx = math.cos(rad) * dx + math.sin(rad) * dy
-    rotated_dy = -math.sin(rad) * dx + math.cos(rad) * dy
-    anchor_screen_x = transformed[-1].get_width() / 2.0 + rotated_dx
-    anchor_screen_y = transformed[-1].get_height() / 2.0 + rotated_dy
-    left = int(round(hull_edge_pos[0] - anchor_screen_x))
-    top = int(round(hull_edge_pos[1] - anchor_screen_y))
-
-    # Export-Vorgabe: Glow und Flamme liegen hinter dem festen Gehaeuse.
-    for image in transformed:
+        # Ankerposition fuer jede Ebene separat berechnen. So vergroessern
+        # sich Flamme und Glow um denselben Austrittspunkt statt wegzurutschen.
+        dx = anchor_x * layer_scale - (cell_w * layer_scale) / 2.0
+        dy = anchor_y * layer_scale - (cell_h * layer_scale) / 2.0
+        rotated_dx = cos_a * dx + sin_a * dy
+        rotated_dy = -sin_a * dx + cos_a * dy
+        anchor_screen_x = image.get_width() / 2.0 + rotated_dx
+        anchor_screen_y = image.get_height() / 2.0 + rotated_dy
+        left = int(round(hull_edge_pos[0] - anchor_screen_x))
+        top = int(round(hull_edge_pos[1] - anchor_screen_y))
         surface.blit(image, (left, top))
+
     return True
 
 
