@@ -1875,7 +1875,7 @@ ENGINE_SPRITE_FOLDER = os.path.join(
 # Body-Breite ca. 8 % (LVL 1) bis ca. 27 % (LVL 12) der Schiffsbreite -
 # die Groessenprogression der 12 Stufen bleibt 1:1 erhalten.
 FORTRESS_NORM_W = 160   # = Fortress.target_width (fortress_2d.py, Instanz-Attribut)
-ENGINE_SHIP_SCALE = 0.5
+ENGINE_SHIP_SCALE = 0.75
 _engine_sprite_meta = None
 _engine_sprite_cache = {}
 
@@ -1967,9 +1967,9 @@ def draw_engine_sprites(surface, level, hull_edge_pos, scale=1.0, angle=0.0):
     # praesenter, die Plasmaflamme deutlich laenger und der Glow breiter.
     # Alle Ebenen behalten denselben Koerperanker am Schiff.
     layers = (
-        (data["glow_frames"][frame_index], base_scale * 2.00),
-        (data["frames"][frame_index], base_scale * 1.80),
-        (data["body"], base_scale * 1.40),
+        (data["glow_frames"][frame_index], base_scale * 2.80),
+        (data["frames"][frame_index], base_scale * 2.40),
+        (data["body"], base_scale * 1.80),
     )
     rad = math.radians(engine_angle)
     cos_a, sin_a = math.cos(rad), math.sin(rad)
@@ -5548,41 +5548,27 @@ class Game:
         return timer >= full
 
     def draw_defeat(self):
-        """PAKET 8.8b: Video-Playback (cover-fit), danach End-VORHANG mit
-        Verlaufskante: "SCHIFF ZERSTÖRT" + pulsierendes "TIPPEN FÜR
-        NEUSTART". KEINE Buttons (8.8a) - ein Tipp irgendwo startet die
-        Stufe neu. Der hoehere Vorhang verdeckt jetzt zuverlaessig die
-        eingebrannten {R}/HAUPTMENUE-Buttons der Animation."""
+        """Defeat-Sequenz ohne eingeblendete Neustart-Schaltflaeche.
+        Nach dem Video wird ein eigenstaendiger, ruhiger Endscreen
+        gezeichnet, damit auch keine in das Video eingebrannten Buttons
+        oder Menue-Hinweise sichtbar bleiben."""
         self._ui = self._layout_defeat()
-        if not self.defeat_frames:
-            SCREEN.fill((16, 0, 4))
-        else:
-            self._video_overlay(self.defeat_frames, self.defeat_timer)
         ended = (not self.defeat_frames) or \
             self.defeat_timer >= len(self.defeat_frames) / 30.0
-        if ended and "def_tap" in self._ui:
-            card = self._defeat_card_rect
-            shade = pygame.Surface((card.w, card.h), pygame.SRCALPHA)
-            shade.fill((5, 2, 6, 232))
-            SCREEN.blit(shade, card.topleft)
-            # Verlaufskante oben (8.8b): weicher Uebergang statt harter Linie
-            gh = max(10, u(22))
-            gk = (card.w, gh)
-            grad = getattr(self, "_defeat_grad", None)
-            if grad is None or grad.get_size() != gk:
-                grad = pygame.Surface(gk, pygame.SRCALPHA)
-                for yy in range(gh):
-                    grad.fill((5, 2, 6, int(232 * (1.0 - yy / (gh - 1)))),
-                              (0, yy, gk[0], 1))
-                self._defeat_grad = grad
-            SCREEN.blit(grad, (card.x, card.y - gh))
-            neon_text(SCREEN, "SCHIFF ZERSTÖRT", F(15), RED,
-                      (card.centerx, card.y + u(46)), "center", 2)
-            # Pulsierender Hinweis statt Buttons (8.8a)
-            _p = 0.5 + 0.5 * math.sin(pygame.time.get_ticks() * 0.003)
-            _hc = (int(96 + 96 * _p), int(96 + 88 * _p), int(106 + 90 * _p))
-            neon_text(SCREEN, "TIPPEN FÜR NEUSTART", F(11), _hc,
-                      (card.centerx, card.y + u(88)), "center", 1)
+
+        if not ended and self.defeat_frames:
+            self._video_overlay(self.defeat_frames, self.defeat_timer)
+            return
+
+        # Das letzte Videobild wird absichtlich NICHT stehen gelassen:
+        # Es kann grafisch eingebrannte {R}/ESC-/Button-Elemente enthalten.
+        SCREEN.fill((8, 3, 9))
+        glow = radial_glow_k((150, 24, 42), max(80, u(190)), 0.22)
+        SCREEN.blit(glow, glow.get_rect(center=(ui_kit.W // 2,
+                                                ui_kit.H // 2 - u(10))),
+                    special_flags=pygame.BLEND_ADD)
+        neon_text(SCREEN, "SCHIFF ZERSTÖRT", F(19), RED,
+                  (ui_kit.W // 2, ui_kit.H // 2), "center", 2)
 
     def draw_stage_clear(self):
         """AUFTRAG 20 (PUNKT 3): Sieg-Screen mit ETAPPEN-UEBERSICHT -
