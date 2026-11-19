@@ -4347,13 +4347,10 @@ class Game:
         return ui
 
     def _layout_defeat(self):
-        """Video antippen = ueberspringen; Aktionen liegen danach direkt
-        auf dem letzten Videobild - kein separater Defeat-Zwischenscreen."""
+        """Unsichtbare Touch-/Maus-Hitboxen direkt ueber den Aktionsfeldern
+        im Defeat-Video. Die Videobeschriftungen bleiben die einzige UI;
+        die Btn-Objekte dienen ausschliesslich dem vorhandenen Hit-Testing."""
         W, H = ui_kit.W, ui_kit.H
-        full = len(self.defeat_frames) / 30.0 if self.defeat_frames else 0.0
-        if self.defeat_frames and self.defeat_timer < full:
-            return {"def_skip": Btn("def_skip", pygame.Rect(0, 0, W, H))}
-
         bw = int(W * 0.40)
         gap = u(16)
         bh = int(btn_h() * 1.25)
@@ -4361,11 +4358,9 @@ class Game:
         y = int(H * 0.78)
         return {
             "def_restart": Btn("def_restart",
-                               pygame.Rect(x0, y, bw, bh),
-                               "STUFE NEU STARTEN", "", RED),
+                               pygame.Rect(x0, y, bw, bh)),
             "def_home": Btn("def_home",
-                            pygame.Rect(x0 + bw + gap, y, bw, bh),
-                            "ZUR STARTSEITE", "", CYAN),
+                            pygame.Rect(x0 + bw + gap, y, bw, bh)),
         }
 
     def _next_stage_target(self):
@@ -5549,23 +5544,15 @@ class Game:
         return timer >= full
 
     def draw_defeat(self):
-        """Defeat-Video; Aktionen erscheinen auf dem letzten Videobild."""
+        """Defeat-Video mit unsichtbaren Aktions-Hitboxen; keine Buttons zeichnen."""
         self._ui = self._layout_defeat()
         full = len(self.defeat_frames) / 30.0 if self.defeat_frames else 0.0
 
         if self.defeat_frames:
-            # Auch nach Ablauf bleibt das letzte Videobild sichtbar.
-            # Kein neues Fenster, kein separater Hintergrund und kein Panel.
             self._video_overlay(self.defeat_frames,
                                 min(self.defeat_timer, full))
         else:
             SCREEN.fill((5, 7, 18))
-
-        # Nach Videoende bzw. Tap nur die zwei Aktionen direkt ueber dem
-        # eingefrorenen Bild anzeigen.
-        if not self.defeat_frames or self.defeat_timer >= full:
-            for bid, b in self._ui.items():
-                draw_compact_btn(SCREEN, b, pressed=self._pressed(bid))
 
     def draw_stage_clear(self):
         """AUFTRAG 20 (PUNKT 3): Sieg-Screen mit ETAPPEN-UEBERSICHT -
