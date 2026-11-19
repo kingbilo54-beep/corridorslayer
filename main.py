@@ -1872,8 +1872,8 @@ ENGINE_SPRITE_FOLDER = os.path.join(
 # FORTRESS_NORM_W = normierte Schiffsbreite in Welt-Einheiten (Fortress
 # target_width), ENGINE_SHIP_SCALE = Faktor der meta-Skalierung, mit dem
 # die Sprite-Zelle relativ zur Schiffsbreite gezeichnet wird. Ergebnis:
-# Body-Breite ca. 8 % (LVL 1) bis ca. 27 % (LVL 12) der Schiffsbreite -
-# die Groessenprogression der 12 Stufen bleibt 1:1 erhalten.
+# Die Engine-Sprites werden bewusst gross gezeichnet; die Progression
+# der 12 Asset-Stufen bleibt erhalten.
 FORTRESS_NORM_W = 160   # = Fortress.target_width (fortress_2d.py, Instanz-Attribut)
 ENGINE_SHIP_SCALE = 1.0
 _engine_sprite_meta = None
@@ -4628,9 +4628,8 @@ class Game:
         # Montageflansch; Flamme/Glow bleiben als Animation sichtbar.
         # WICHTIG: dieselbe Skalierungsformel wie im Gefecht/Idle
         # (_draw_world) - der Antrieb ist in allen drei Modi GLEICH GROSS
-        # relativ zum Schiff. Die Groessenprogression kommt 1:1 aus den
-        # Assets (Body-Diagonale waechst monoton ueber LVL 1-12; Body-Breite ca.
-        # 8 % der Schiffsbreite bei LVL 1 bis ca. 27 % bei LVL 12).
+        # relativ zum Schiff. Die Engine-Layer werden separat und deutlich
+        # groesser skaliert, damit auch niedrige Antriebsstufen sichtbar sind.
         ex, ey = P(lay.get("engine", WERFT_LAYOUT_DEFAULT["engine"]))
         engine_level = self.modules.get("antrieb").level
         engine_data = _load_engine_sprite_data(engine_level)
@@ -5190,8 +5189,8 @@ class Game:
         # Neue levelgenaue Triebwerksgrafik in Idle UND Kampagne.
         # Sie sitzt hinter dem Rumpf; der Rumpf wird direkt danach darueber
         # gezeichnet. Der prozedurale Effekt bleibt als sicherer Fallback.
-        # Skalierung identisch zur Werft: Body-Breite ca. 8 % (LVL 1) bis
-        # ca. 27 % (LVL 12) der Schiffsbreite (160 Welt-Einheiten * s).
+        # Die Engine-Layer werden separat skaliert; auch niedrige Stufen
+        # sollen im Kampf klar als Antrieb erkennbar sein.
         engine_lvl = self.modules.get("antrieb").level
         engine_data = _load_engine_sprite_data(engine_lvl)
         engine_info = (engine_data or {}).get("info", {})
