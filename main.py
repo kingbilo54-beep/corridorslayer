@@ -1875,7 +1875,7 @@ ENGINE_SPRITE_FOLDER = os.path.join(
 # Body-Breite ca. 8 % (LVL 1) bis ca. 27 % (LVL 12) der Schiffsbreite -
 # die Groessenprogression der 12 Stufen bleibt 1:1 erhalten.
 FORTRESS_NORM_W = 160   # = Fortress.target_width (fortress_2d.py, Instanz-Attribut)
-ENGINE_SHIP_SCALE = 0.75
+ENGINE_SHIP_SCALE = 1.0
 _engine_sprite_meta = None
 _engine_sprite_cache = {}
 
@@ -1967,9 +1967,11 @@ def draw_engine_sprites(surface, level, hull_edge_pos, scale=1.0, angle=0.0):
     # praesenter, die Plasmaflamme deutlich laenger und der Glow breiter.
     # Alle Ebenen behalten denselben Koerperanker am Schiff.
     layers = (
-        (data["glow_frames"][frame_index], base_scale * 2.80),
-        (data["frames"][frame_index], base_scale * 2.40),
-        (data["body"], base_scale * 1.80),
+        # Glow weit ueber den Koerper hinaus, damit der Antrieb sichtbar
+        # Energie abstrahlt statt wie ein kleines angeklebtes Sprite wirkt.
+        (data["glow_frames"][frame_index], base_scale * 4.30),
+        (data["frames"][frame_index], base_scale * 3.60),
+        (data["body"], base_scale * 3.00),
     )
     rad = math.radians(engine_angle)
     cos_a, sin_a = math.cos(rad), math.sin(rad)
@@ -3620,15 +3622,18 @@ class Game:
             return
 
         if st == self.DEFEAT:
-            # PAKET 8.7: Skip waehrend des Videos.
-            # PAKET 8.8a: danach keine Buttons mehr - TAP irgendwo =
-            # Stufe neu starten (zum Hauptmenue: im Gefecht Pause ->
-            # "ZUM HAUPTMENÜ").
+            # Ein Tap auf das Video beendet nur die Sequenz und oeffnet
+            # die Auswahl. Neustart/Startseite sind danach getrennte Ziele.
             if bid == "def_skip":
                 if self.defeat_frames:
                     self.defeat_timer = len(self.defeat_frames) / 30.0
-            elif bid == "def_tap":
+            elif bid == "def_restart":
                 self._restart_stage()
+            elif bid == "def_home":
+                SFX.stop_music()
+                self._map_deselect()
+                self.selected_sector = 0
+                self.state = self.MENU
             return
 
         if st in (self.STAGE_CLEAR, self.VICTORY):   # AUFTRAG 6: gleiche Buttons
@@ -4342,29 +4347,25 @@ class Game:
         return ui
 
     def _layout_defeat(self):
-        """PAKET 8.7: Waehrend des Videos ist der ganze Screen der
-        unsichtbare Skip.
-        PAKET 8.8a (Nutzerwunsch "die zusaetzlichen Buttons weg"):
-        Nach dem Video KEINE Buttons mehr - ein TAP irgendwo startet die
-        Stufe neu.
-        PAKET 8.8b: Der End-VORHANG ist wieder hoeher (u(124) statt
-        u(96)) und mit Verlaufskante - die in die Defeat-Animation
-        eingebrannten {R}-NEUSTART/HAUPTMENUE-Buttons guckten oben wieder
-        heraus (Nutzer: "Es kommt wieder ein pop up"). Zusätzlich wird
-        das Video per cover-fit auf den ganzen Screen skaliert, sodass
-        die eingebrannten Buttons IMMER am unteren Rand liegen."""
+        """Video antippen = ueberspringen; danach zwei klare Entscheidungen."""
         W, H = ui_kit.W, ui_kit.H
-        ui = {}
-        if self.defeat_frames and self.defeat_timer < len(self.defeat_frames) / 30.0:
-            ui["def_skip"] = Btn("def_skip", pygame.Rect(0, 0, W, H))
-            return ui
-        ended = not self.defeat_frames or \
-            self.defeat_timer >= len(self.defeat_frames) / 30.0
-        if ended:
-            self._defeat_card_rect = pygame.Rect(0, H - u(124), W, u(124))
-            # Kompletter Screen = unsichtbare Tap-Zone (Neustart)
-            ui["def_tap"] = Btn("def_tap", pygame.Rect(0, 0, W, H))
-        return ui
+        full = len(self.defeat_frames) / 30.0 if self.defeat_frames else 0.0
+        if self.defeat_frames and self.defeat_timer < full:
+            return {"def_skip": Btn("def_skip", pygame.Rect(0, 0, W, H))}
+
+        bw = int(W * 0.40)
+        gap = u(16)
+        bh = int(btn_h() * 1.35)
+        x0 = (W - (bw * 2 + gap)) // 2
+        y = int(H * 0.64)
+        return {
+            "def_restart": Btn("def_restart",
+                               pygame.Rect(x0, y, bw, bh),
+                               "STUFE NEU STARTEN", "", RED),
+            "def_home": Btn("def_home",
+                            pygame.Rect(x0 + bw + gap, y, bw, bh),
+                            "ZUR STARTSEITE", "", CYAN),
+        }
 
     def _next_stage_target(self):
         """AUFTRAG 20 (PUNKT 3): Ziel des NAECHSTE-Buttons nach einem
@@ -5548,27 +5549,29 @@ class Game:
         return timer >= full
 
     def draw_defeat(self):
-        """Defeat-Sequenz ohne eingeblendete Neustart-Schaltflaeche.
-        Nach dem Video wird ein eigenstaendiger, ruhiger Endscreen
-        gezeichnet, damit auch keine in das Video eingebrannten Buttons
-        oder Menue-Hinweise sichtbar bleiben."""
+        """Defeat-Video; danach direkt die Auswahl Neustart oder Startseite."""
         self._ui = self._layout_defeat()
-        ended = (not self.defeat_frames) or \
-            self.defeat_timer >= len(self.defeat_frames) / 30.0
-
-        if not ended and self.defeat_frames:
+        full = len(self.defeat_frames) / 30.0 if self.defeat_frames else 0.0
+        if self.defeat_frames and self.defeat_timer < full:
             self._video_overlay(self.defeat_frames, self.defeat_timer)
             return
 
-        # Das letzte Videobild wird absichtlich NICHT stehen gelassen:
-        # Es kann grafisch eingebrannte {R}/ESC-/Button-Elemente enthalten.
-        SCREEN.fill((8, 3, 9))
-        glow = radial_glow_k((150, 24, 42), max(80, u(190)), 0.22)
-        SCREEN.blit(glow, glow.get_rect(center=(ui_kit.W // 2,
-                                                ui_kit.H // 2 - u(10))),
+        # Kein zusaetzlicher "SCHIFF ZERSTOERT"-Zwischenscreen und kein
+        # automatischer Neustart: nur die zwei expliziten Aktionen.
+        W, H = ui_kit.W, ui_kit.H
+        SCREEN.fill((5, 7, 18))
+        glow = radial_glow_k((150, 24, 42), max(90, u(230)), 0.18)
+        SCREEN.blit(glow, glow.get_rect(center=(W // 2, int(H * 0.39))),
                     special_flags=pygame.BLEND_ADD)
-        neon_text(SCREEN, "SCHIFF ZERSTÖRT", F(19), RED,
-                  (ui_kit.W // 2, ui_kit.H // 2), "center", 2)
+        panel = pygame.Rect(int(W * 0.12), int(H * 0.22),
+                            int(W * 0.76), int(H * 0.58))
+        glass_panel(SCREEN, panel, accent=RED, radius=u(16), alpha=224, width=2)
+        neon_text(SCREEN, "MISSION GESCHEITERT", F(21), RED,
+                  (W // 2, int(H * 0.34)), "center", 2)
+        neon_text(SCREEN, "WIE MÖCHTEST DU FORTFAHREN?", F(11), MUTED,
+                  (W // 2, int(H * 0.48)), "center", 1)
+        for bid, b in self._ui.items():
+            draw_compact_btn(SCREEN, b, pressed=self._pressed(bid))
 
     def draw_stage_clear(self):
         """AUFTRAG 20 (PUNKT 3): Sieg-Screen mit ETAPPEN-UEBERSICHT -
