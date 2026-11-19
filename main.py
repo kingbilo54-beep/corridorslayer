@@ -1868,6 +1868,14 @@ def load_antrieb_image(level):
 ENGINE_SPRITE_FOLDER = os.path.join(
     _BASE, "antriebe", "Antriebsgrafiken_LVL1-12"
 )
+# Gemeinsame Groessennorm aller drei Ansichten (Werft, Idle, Kampagne):
+# FORTRESS_NORM_W = normierte Schiffsbreite in Welt-Einheiten (Fortress
+# target_width), ENGINE_SHIP_SCALE = Faktor der meta-Skalierung, mit dem
+# die Sprite-Zelle relativ zur Schiffsbreite gezeichnet wird. Ergebnis:
+# Body-Breite ca. 8 % (LVL 1) bis ca. 27 % (LVL 12) der Schiffsbreite -
+# die Groessenprogression der 12 Stufen bleibt 1:1 erhalten.
+FORTRESS_NORM_W = 160   # = Fortress.target_width (fortress_2d.py, Instanz-Attribut)
+ENGINE_SHIP_SCALE = 0.5
 _engine_sprite_meta = None
 _engine_sprite_cache = {}
 
@@ -2061,11 +2069,16 @@ def load_kanonen_crop(level):
 # ---------------------------------------------------------------------
 # WERFT-LAYOUT: Positionen/Groessen RELATIV zum Schiffsrechteck.
 # Key = geladenes Schiffs-Bild (fortress.level, naechstniedrigere Stufe).
-#   engine  : (ux, uy) HULL-ANSCHLUSSPUNKT des Antriebs; hier trifft
-#             hull_edge_x_recommended aus meta.json auf die Heckkante.
-#   engine_w: sichtbare Gehaeusebreite als Anteil der Schiffs-BREITE.
-#   engine_angle: Pygame-Drehwinkel nach horizontalem Spiegeln
-#             (Standard -45 Grad: Schubachse zeigt links-oben).
+#   engine  : (ux, uy) HULL-ANSCHLUSSPUNKT des Antriebs; hier sitzt der
+#             Koerper-Anker (336,200) aus meta.json - Gehaeuse ragt
+#             hinter die Heckkante, Flamme spritzt nach links-oben.
+#             Diese UV nutzt AUCH das Gefecht/Idle (_engine_anchor_offset).
+#   engine_w: Fallback-Breite (alte antrieb-PNGs) als Anteil der
+#             Schiffs-BREITE; die neuen Sprites skalieren ueber die
+#             einheitliche Formel meta.scale * ENGINE_SHIP_SCALE.
+#   engine_angle: Pygame-Drehwinkel des Antriebs (Standard 0.0: die
+#             neuen Sprites sind bereits passend zur Diagonal-Heck-
+#             ausrichtung exportiert; kein Spiegeln, kein Drehen).
 #   radar   : (ux, uy) FUSSPUNKT der Radarantenne (midbottom-Anker) auf
 #             dem Heckaufbau; radar_h = Zielhoehe als Anteil der
 #             Schiffs-HOEHE (klein! feste Schiffsantenne, kein Funkturm).
@@ -2199,6 +2212,29 @@ WERFT_LAYOUT = {
              "kanonen": (0.525, 0.41), "hangar": (0.57, 0.70),
              "reparatur": (0.36, 0.80), "huelle": (0.30, 0.45),
              "reaktor": (0.44, 0.32), "schild": (0.80, 0.58),
+         }},
+    # Pfeil-Form der Rumpfklassen 11/12: Heckblock mittig-links (nicht
+    # oben-links wie bei den diagonalen Rumpfen) - Antrieb und Antriebs-
+    # Hotspot folgen der Heckkante; uebrige Anker wie bisher (Default).
+    11: {"engine": (0.06, 0.36), "engine_w": 0.26,
+         "radar": (0.235, 0.135), "radar_h": 0.185,
+         "hangar": (0.545, 0.465), "hangar_w": 0.205, "hangar_hmax": 0.30,
+         "cannon_w": 0.21,
+         "hotspots": {
+             "antrieb": (0.035, 0.37), "radar": (0.235, 0.135),
+             "kanonen": (0.525, 0.335), "hangar": (0.545, 0.465),
+             "reparatur": (0.415, 0.615), "huelle": (0.315, 0.40),
+             "reaktor": (0.36, 0.245), "schild": (0.70, 0.62),
+         }},
+    12: {"engine": (0.055, 0.36), "engine_w": 0.26,
+         "radar": (0.235, 0.135), "radar_h": 0.185,
+         "hangar": (0.545, 0.465), "hangar_w": 0.205, "hangar_hmax": 0.30,
+         "cannon_w": 0.21,
+         "hotspots": {
+             "antrieb": (0.03, 0.37), "radar": (0.235, 0.135),
+             "kanonen": (0.525, 0.335), "hangar": (0.545, 0.465),
+             "reparatur": (0.415, 0.615), "huelle": (0.315, 0.40),
+             "reaktor": (0.36, 0.245), "schild": (0.70, 0.62),
          }},
 }
 
@@ -2341,7 +2377,10 @@ class Game:
         self.is_dragging_cannon = False
         self.is_dragging_engine = False
         self.debug_cannon_offset = [4, -14]
-        self.debug_engine_offset = [-106, -24]
+        # Manuelle Justage DESKTOP-Debug: Delta AUF dem automatischen
+        # Heckanker (_engine_anchor_offset) - nicht mehr eine absolute
+        # Hartkodierung vom Schiffszentrum (alte Werte [-106, -24]).
+        self.debug_engine_offset = [0, 0]
         self.rumble_x = 0.0
         self.rumble_y = 0.0
 
@@ -2965,8 +3004,12 @@ class Game:
                 if event.button == 1:
                     self._press(pos)
                 elif event.button == 3 and self.debug_mode and self.state == self.PLAYING:
-                    ex = self.fortress.x + self.debug_engine_offset[0]
-                    ey = self.fortress.y + self.debug_engine_offset[1]
+                    # Greifpunkt = automatischer Heckanker + Debug-Delta
+                    # (UNSKALIERT: Event-Koordinaten sind Screen-px, der
+                    # Anker Welt-Einheiten; das Delta reicht fuer Testzwecke)
+                    _ax, _ay = self._engine_anchor_offset()
+                    ex = self.fortress.x + _ax + self.debug_engine_offset[0]
+                    ey = self.fortress.y + _ay + self.debug_engine_offset[1]
                     if math.hypot(pos[0] - ex, pos[1] - ey) < 60:
                         self.is_dragging_engine = True
 
@@ -3001,8 +3044,10 @@ class Game:
             self.debug_cannon_offset[0] = pos[0] - self.fortress.x
             self.debug_cannon_offset[1] = pos[1] - self.fortress.y
         if self.is_dragging_engine:
-            self.debug_engine_offset[0] = pos[0] - self.fortress.x
-            self.debug_engine_offset[1] = pos[1] - self.fortress.y
+            # Antrieb ziehen: Delta zum AUTOMATISCHEN Heckanker speichern
+            _ax, _ay = self._engine_anchor_offset()
+            self.debug_engine_offset[0] = pos[0] - (self.fortress.x + _ax)
+            self.debug_engine_offset[1] = pos[1] - (self.fortress.y + _ay)
 
     def _press(self, pos):
         self._ptr = None
@@ -4114,6 +4159,21 @@ class Game:
             return dict(WERFT_LAYOUT_DEFAULT)
         return lay
 
+    def _engine_anchor_offset(self):
+        """Automatischer Heckanker des Antriebs als Offset vom Schiffszentrum
+        in Welt-Einheiten (unrotiert). Quelle ist die Heck-UV desselben
+        WERFT_LAYOUT, das die Werft nutzt -> Antrieb sitzt in Werft, Idle
+        und Kampagne identisch am Heck, skalisiert mit der Schiffsbox und
+        ohne hartcodierte Bildschirmkoordinaten. Ohne Schiffs-Bild liefert
+        die Methode das Debug-Delta (Legacy-Fallback)."""
+        base = getattr(self.fortress, "_base_image", None)
+        if base is None:
+            return tuple(self.debug_engine_offset)
+        iw, ih = base.get_size()
+        uvx, uvy = self._werft_layout().get(
+            "engine", WERFT_LAYOUT_DEFAULT["engine"])
+        return ((uvx - 0.5) * iw, (uvy - 0.5) * ih)
+
     def _werft_cannon_uv(self):
         """Vorhandene Waffenposition (CANNON_OFFSETS, Gefechts-Weltkoords
         bei 160 px Schiffsbreite) als UV auf das Schiffsrechteck - Werft
@@ -4557,29 +4617,42 @@ class Game:
             pygame.draw.ellipse(sh, (0, 0, 0, 78), (0, 0, w, h))
             SCREEN.blit(sh, (int(cx - w / 2), int(cy - h / 2)))
 
-        # --- 1) ANTRIEB: Gehaeuse + animierte Flamme HINTER dem Rumpf ---
-        # Beide Ebenen teilen denselben metadata-definierten Heckanker.
+        # --- 1) ANTRIEB: Glow + Flamme + Gehaeuse HINTER dem Rumpf ---
+        # Drei Ebenen teilen denselben metadata-definierten Heckanker
+        # (Koerper-Anker aus meta.json, siehe draw_engine_sprites).
         # Der Rumpf wird danach darueber gezeichnet und verdeckt den
-        # Montageflansch; die Flamme bleibt als Animation sichtbar.
-        ex, ey = P(lay.get("engine", (0.075, 0.155)))
+        # Montageflansch; Flamme/Glow bleiben als Animation sichtbar.
+        # WICHTIG: dieselbe Skalierungsformel wie im Gefecht/Idle
+        # (_draw_world) - der Antrieb ist in allen drei Modi GLEICH GROSS
+        # relativ zum Schiff. Die Groessenprogression kommt 1:1 aus den
+        # Assets (Body-Diagonale waechst monoton ueber LVL 1-12; Body-Breite ca.
+        # 8 % der Schiffsbreite bei LVL 1 bis ca. 27 % bei LVL 12).
+        ex, ey = P(lay.get("engine", WERFT_LAYOUT_DEFAULT["engine"]))
         engine_level = self.modules.get("antrieb").level
         engine_data = _load_engine_sprite_data(engine_level)
-        engine_info = (engine_data or {}).get("info", {})
-        # meta.scale erzeugt die vorgesehene Groessenprogression LVL 1-12.
-        # engine_w skaliert diese Progression relativ zur Schiffsgroesse.
-        target_body_w = max(1.0, float(lay.get("engine_w", 0.30)) * ship_draw.w)
-        reference_diag = max(1.0, float(engine_info.get("body_diag_final", 92.9)))
-        base_scale = float(engine_info.get("scale", 0.2635))
-        engine_scale = max(0.02, min(2.0,
-            base_scale * target_body_w / reference_diag
-        ))
-        engine_angle = float(lay.get(
-            "engine_angle", WERFT_LAYOUT_DEFAULT["engine_angle"]
-        ))
-        draw_engine_sprites(
-            SCREEN, engine_level, (ex, ey),
-            scale=engine_scale, angle=engine_angle
-        )
+        if engine_data is not None:
+            base_scale = float(engine_data["info"].get("scale", 0.2635))
+            engine_scale = max(0.02, min(2.0,
+                base_scale * ENGINE_SHIP_SCALE * ship_draw.w / FORTRESS_NORM_W
+            ))
+            engine_angle = float(lay.get(
+                "engine_angle", WERFT_LAYOUT_DEFAULT["engine_angle"]
+            ))
+            draw_engine_sprites(
+                SCREEN, engine_level, (ex, ey),
+                scale=engine_scale, angle=engine_angle
+            )
+        else:
+            # Sicherheitsnetz: Neue Sprites nicht ladbar (Ordner fehlt,
+            # defekte PNGs) -> bisherige generische Antriebs-PNGs aus
+            # antrieb/ verwenden. Gleiches Zeichenprinzip: HINTER dem
+            # Rumpf, am Heckanker, Breite aus engine_w.
+            legacy = load_antrieb_image(engine_level)
+            if legacy is not None:
+                lw = max(2, int(lay.get("engine_w", 0.30) * ship_draw.w))
+                lh = max(2, int(lw * legacy.get_height() / legacy.get_width()))
+                leg_s = pygame.transform.smoothscale(legacy, (lw, lh))
+                SCREEN.blit(leg_s, leg_s.get_rect(center=(ex, ey)))
 
         # --- 2) SCHIFFSRUMPF (verdeckt den vorderen Antriebsteil) ---
         if base is not None:
@@ -5076,7 +5149,16 @@ class Game:
 
         ship_x, ship_y = self.movement.get_position(self.fortress.x, self.fortress.y)
         angle = self.movement.get_angle()
-        ex, ey = T(ship_x + self.debug_engine_offset[0], ship_y + self.debug_engine_offset[1])
+        # Antriebsanker: AUTOMATISCH aus der Heck-UV desselben WERFT_LAYOUT,
+        # das auch die Werft nutzt (relative Position zur Schiffsbox - keine
+        # hartcodierten Offsets mehr). Der Anker rotiert MIT dem Schiff, und
+        # das Desktop-Debug-Delta (debug_engine_offset) bleibt wirksam.
+        adx, ady = self._engine_anchor_offset()
+        _rad = math.radians(angle)
+        adx, ady = (math.cos(_rad) * adx + math.sin(_rad) * ady,
+                    -math.sin(_rad) * adx + math.cos(_rad) * ady)
+        ex, ey = T(ship_x + adx + self.debug_engine_offset[0],
+                   ship_y + ady + self.debug_engine_offset[1])
         self.engine_effect.set_position(ex, ey)
         # PUNKT-6-WIEDERHERSTELLUNG (Triebwerk): gezeichnet wird der Strahl
         # erst NACH dem Schildring - die Schild-PNGs der Stufen 1-8 tragen
@@ -5104,10 +5186,13 @@ class Game:
         # Neue levelgenaue Triebwerksgrafik in Idle UND Kampagne.
         # Sie sitzt hinter dem Rumpf; der Rumpf wird direkt danach darueber
         # gezeichnet. Der prozedurale Effekt bleibt als sicherer Fallback.
+        # Skalierung identisch zur Werft: Body-Breite ca. 8 % (LVL 1) bis
+        # ca. 27 % (LVL 12) der Schiffsbreite (160 Welt-Einheiten * s).
         engine_lvl = self.modules.get("antrieb").level
         engine_data = _load_engine_sprite_data(engine_lvl)
         engine_info = (engine_data or {}).get("info", {})
-        engine_scale = float(engine_info.get("scale", 0.2635)) * 0.50 * s
+        engine_scale = float(engine_info.get("scale", 0.2635)) \
+            * ENGINE_SHIP_SCALE * s
         if not draw_engine_sprites(
             SCREEN, engine_lvl, (ex, ey),
             scale=engine_scale, angle=angle
