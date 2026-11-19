@@ -1963,15 +1963,14 @@ def draw_engine_sprites(surface, level, hull_edge_pos, scale=1.0, angle=0.0):
     engine_angle = float(angle)
     anchor_x, anchor_y = info["anchor"]["position"]
 
-    # Die Ebenen wachsen bewusst unterschiedlich: Das Gehaeuse wird
-    # praesenter, die Plasmaflamme deutlich laenger und der Glow breiter.
-    # Alle Ebenen behalten denselben Koerperanker am Schiff.
+    # Die Metadaten enthalten bereits den finalen Skalierungsfaktor.
+    # Keine zusaetzliche Vergroesserung aus dem frueheren Grafikprogramm:
+    # Body, Flamme und Glow verwenden dieselbe Zellgroesse und denselben
+    # Anker, damit der komplette Antrieb zur Schiffsbreite passt.
     layers = (
-        # Glow weit ueber den Koerper hinaus, damit der Antrieb sichtbar
-        # Energie abstrahlt statt wie ein kleines angeklebtes Sprite wirkt.
-        (data["glow_frames"][frame_index], base_scale * 4.30),
-        (data["frames"][frame_index], base_scale * 3.60),
-        (data["body"], base_scale * 3.00),
+        (data["glow_frames"][frame_index], base_scale),
+        (data["frames"][frame_index], base_scale),
+        (data["body"], base_scale),
     )
     rad = math.radians(engine_angle)
     cos_a, sin_a = math.cos(rad), math.sin(rad)
