@@ -1,0 +1,432 @@
+{
+ "projekt": "Antriebsgrafiken LVL 1-15 (LVL 1-9 unverändert aus Benutzer-Referenz; LVL 10-15 ueberarbeitet: groessere Koerper, neue Flammen mit Feuerkugel, Glow; LVL 13-15 originalgetreu aus graphics levels 13-15.jpg)",
+ "zelle": {
+  "breite": 512,
+  "hoehe": 384,
+  "frames": 8,
+  "fps": 12,
+  "loop": "nahtlos",
+  "stapel": "vertikal (512x3072 je Atlas)",
+  "stufen_gesamt": 15
+ },
+ "anker": {
+  "typ": "koerperzentrum",
+  "position": [
+   336,
+   200
+  ]
+ },
+ "ausrichtung": "unveraendert aus Referenz: Flamme oben-links, Koerper unten-rechts",
+ "stufen": {
+  "1": {
+   "tag": "L1",
+   "scale": 0.2635,
+   "anchor": [
+    336,
+    200
+   ],
+   "body_diag_src": 352.7,
+   "body_diag_final": 92.9,
+   "flame_root_canvas": [
+    299,
+    186
+   ],
+   "flame_rgb": [
+    204,
+    99,
+    85
+   ],
+   "frames": 8,
+   "fps": 12
+  },
+  "2": {
+   "tag": "L2",
+   "scale": 0.2635,
+   "anchor": [
+    336,
+    200
+   ],
+   "body_diag_src": 385.0,
+   "body_diag_final": 101.4,
+   "flame_root_canvas": [
+    294,
+    185
+   ],
+   "flame_rgb": [
+    214,
+    114,
+    87
+   ],
+   "frames": 8,
+   "fps": 12
+  },
+  "3": {
+   "tag": "L3",
+   "scale": 0.2635,
+   "anchor": [
+    336,
+    200
+   ],
+   "body_diag_src": 451.5,
+   "body_diag_final": 118.9,
+   "flame_root_canvas": [
+    308,
+    167
+   ],
+   "flame_rgb": [
+    212,
+    110,
+    90
+   ],
+   "frames": 8,
+   "fps": 12
+  },
+  "4": {
+   "tag": "L4",
+   "scale": 0.2635,
+   "anchor": [
+    336,
+    200
+   ],
+   "body_diag_src": 499.2,
+   "body_diag_final": 131.5,
+   "flame_root_canvas": [
+    302,
+    168
+   ],
+   "flame_rgb": [
+    214,
+    114,
+    90
+   ],
+   "frames": 8,
+   "fps": 12
+  },
+  "5": {
+   "tag": "L5",
+   "scale": 0.2589,
+   "anchor": [
+    336,
+    200
+   ],
+   "body_diag_src": 524.9,
+   "body_diag_final": 135.9,
+   "flame_root_canvas": [
+    286,
+    177
+   ],
+   "flame_rgb": [
+    213,
+    114,
+    90
+   ],
+   "frames": 8,
+   "fps": 12
+  },
+  "6": {
+   "tag": "L6",
+   "scale": 0.2682,
+   "anchor": [
+    336,
+    200
+   ],
+   "body_diag_src": 506.7,
+   "body_diag_final": 135.9,
+   "flame_root_canvas": [
+    291,
+    172
+   ],
+   "flame_rgb": [
+    215,
+    110,
+    91
+   ],
+   "frames": 8,
+   "fps": 12
+  },
+  "7": {
+   "tag": "B2",
+   "scale": 0.2635,
+   "anchor": [
+    336,
+    200
+   ],
+   "body_diag_src": 542.4,
+   "body_diag_final": 142.9,
+   "flame_root_canvas": [
+    301,
+    203
+   ],
+   "flame_rgb": [
+    252,
+    228,
+    183
+   ],
+   "frames": 8,
+   "fps": 12
+  },
+  "8": {
+   "tag": "B3",
+   "scale": 0.2635,
+   "anchor": [
+    336,
+    200
+   ],
+   "body_diag_src": 548.2,
+   "body_diag_final": 144.4,
+   "flame_root_canvas": [
+    295,
+    205
+   ],
+   "flame_rgb": [
+    253,
+    228,
+    183
+   ],
+   "frames": 8,
+   "fps": 12
+  },
+  "9": {
+   "tag": "B4",
+   "scale": 0.2635,
+   "anchor": [
+    336,
+    200
+   ],
+   "body_diag_src": 548.1,
+   "body_diag_final": 144.4,
+   "flame_root_canvas": [
+    294,
+    206
+   ],
+   "flame_rgb": [
+    253,
+    228,
+    183
+   ],
+   "frames": 8,
+   "fps": 12
+  },
+  "10": {
+   "tag": "B5",
+   "scale": 0.2635,
+   "anchor": [
+    336,
+    200
+   ],
+   "body_diag_src": 544.8,
+   "body_diag_final": 299.0,
+   "flame_root_canvas": [
+    336,
+    200
+   ],
+   "flame_rgb": [
+    91,
+    158,
+    255
+   ],
+   "frames": 8,
+   "fps": 12,
+   "flame_axis_deg": 40,
+   "flame_reach_visible": 195,
+   "quelle": "Referenz-Sprite (hochaufgeloest)"
+  },
+  "11": {
+   "tag": "H1",
+   "scale": 0.2635,
+   "anchor": [
+    336,
+    200
+   ],
+   "body_diag_src": 953.0,
+   "body_diag_final": 348.6,
+   "flame_root_canvas": [
+    336,
+    200
+   ],
+   "flame_rgb": [
+    94,
+    155,
+    255
+   ],
+   "frames": 8,
+   "fps": 12,
+   "flame_axis_deg": 38,
+   "flame_reach_visible": 200,
+   "quelle": "Referenz-Sprite (hochaufgeloest)"
+  },
+  "12": {
+   "tag": "H2",
+   "scale": 0.2635,
+   "anchor": [
+    336,
+    200
+   ],
+   "body_diag_src": 1115.1,
+   "body_diag_final": 393.1,
+   "flame_root_canvas": [
+    336,
+    200
+   ],
+   "flame_rgb": [
+    112,
+    142,
+    255
+   ],
+   "frames": 8,
+   "fps": 12,
+   "flame_axis_deg": 36,
+   "flame_reach_visible": 185,
+   "quelle": "Referenz-Sprite (hochaufgeloest)"
+  },
+  "13": {
+   "tag": "N1",
+   "scale": 0.2635,
+   "anchor": [
+    336,
+    200
+   ],
+   "body_diag_src": 726.3,
+   "body_diag_final": 418.6,
+   "flame_root_canvas": [
+    336,
+    200
+   ],
+   "flame_rgb": [
+    117,
+    127,
+    255
+   ],
+   "frames": 8,
+   "fps": 12,
+   "flame_axis_deg": 34,
+   "flame_reach_visible": 192,
+   "quelle": "Original-Trennung graphics levels 13-15.jpg"
+  },
+  "14": {
+   "tag": "N2",
+   "scale": 0.2635,
+   "anchor": [
+    336,
+    200
+   ],
+   "body_diag_src": 626.3,
+   "body_diag_final": 434.4,
+   "flame_root_canvas": [
+    336,
+    200
+   ],
+   "flame_rgb": [
+    96,
+    168,
+    255
+   ],
+   "frames": 8,
+   "fps": 12,
+   "flame_axis_deg": 32,
+   "flame_reach_visible": 268,
+   "quelle": "Original-Trennung graphics levels 13-15.jpg"
+  },
+  "15": {
+   "tag": "N3",
+   "scale": 0.2635,
+   "anchor": [
+    336,
+    200
+   ],
+   "body_diag_src": 801.4,
+   "body_diag_final": 459.1,
+   "flame_root_canvas": [
+    336,
+    200
+   ],
+   "flame_rgb": [
+    140,
+    112,
+    249
+   ],
+   "frames": 8,
+   "fps": 12,
+   "flame_axis_deg": 30,
+   "flame_reach_visible": 230,
+   "quelle": "Original-Trennung graphics levels 13-15.jpg"
+  }
+ },
+ "dateien": {
+  "atlas": [
+   "engine_lvl01_anim_8frames_512x384.png",
+   "engine_lvl02_anim_8frames_512x384.png",
+   "engine_lvl03_anim_8frames_512x384.png",
+   "engine_lvl04_anim_8frames_512x384.png",
+   "engine_lvl05_anim_8frames_512x384.png",
+   "engine_lvl06_anim_8frames_512x384.png",
+   "engine_lvl07_anim_8frames_512x384.png",
+   "engine_lvl08_anim_8frames_512x384.png",
+   "engine_lvl09_anim_8frames_512x384.png",
+   "engine_lvl10_anim_8frames_512x384.png",
+   "engine_lvl11_anim_8frames_512x384.png",
+   "engine_lvl12_anim_8frames_512x384.png"
+  ],
+  "ebenen": [
+   "engine_lvl01_body_512x384.png",
+   "engine_lvl01_flame_8frames_512x384.png",
+   "engine_lvl01_glow_8frames_512x384.png",
+   "engine_lvl02_body_512x384.png",
+   "engine_lvl02_flame_8frames_512x384.png",
+   "engine_lvl02_glow_8frames_512x384.png",
+   "engine_lvl03_body_512x384.png",
+   "engine_lvl03_flame_8frames_512x384.png",
+   "engine_lvl03_glow_8frames_512x384.png",
+   "engine_lvl04_body_512x384.png",
+   "engine_lvl04_flame_8frames_512x384.png",
+   "engine_lvl04_glow_8frames_512x384.png",
+   "engine_lvl05_body_512x384.png",
+   "engine_lvl05_flame_8frames_512x384.png",
+   "engine_lvl05_glow_8frames_512x384.png",
+   "engine_lvl06_body_512x384.png",
+   "engine_lvl06_flame_8frames_512x384.png",
+   "engine_lvl06_glow_8frames_512x384.png",
+   "engine_lvl07_body_512x384.png",
+   "engine_lvl07_flame_8frames_512x384.png",
+   "engine_lvl07_glow_8frames_512x384.png",
+   "engine_lvl08_body_512x384.png",
+   "engine_lvl08_flame_8frames_512x384.png",
+   "engine_lvl08_glow_8frames_512x384.png",
+   "engine_lvl09_body_512x384.png",
+   "engine_lvl09_flame_8frames_512x384.png",
+   "engine_lvl09_glow_8frames_512x384.png",
+   "engine_lvl10_body_512x384.png",
+   "engine_lvl10_flame_8frames_512x384.png",
+   "engine_lvl10_glow_8frames_512x384.png",
+   "engine_lvl11_body_512x384.png",
+   "engine_lvl11_flame_8frames_512x384.png",
+   "engine_lvl11_glow_8frames_512x384.png",
+   "engine_lvl12_body_512x384.png",
+   "engine_lvl12_flame_8frames_512x384.png",
+   "engine_lvl12_glow_8frames_512x384.png"
+  ],
+  "previews": [
+   "engine_lvl01_preview.gif",
+   "engine_lvl02_preview.gif",
+   "engine_lvl03_preview.gif",
+   "engine_lvl04_preview.gif",
+   "engine_lvl05_preview.gif",
+   "engine_lvl06_preview.gif",
+   "engine_lvl07_preview.gif",
+   "engine_lvl08_preview.gif",
+   "engine_lvl09_preview.gif",
+   "engine_lvl10_preview.gif",
+   "engine_lvl11_preview.gif",
+   "engine_lvl12_preview.gif",
+   "kontaktbogen_12_stufen.jpg",
+   "alle_stufen_animiert.gif"
+  ]
+ },
+ "entscheidungen": [
+  "LVL 6: Variante aus der oberen Reihe des Referenzbildes verwendet (passende Groessenprogression, reichere Details).",
+  "Bodenschatten der Referenz entfernt (transparenter Hintergrund gefordert).",
+  "Flammen animate: radiale Deformation um die Flammenwurzel + Helligkeitspuls, Design 1:1 aus der Referenz.",
+  "Glow-Ebene: weiches, pulsierendes Flammenleuchten, abgeleitet aus der jeweiligen Flammenfarbe."
+ ],
+ "stufen_13_15_quelle": "antriebe/Antriebsgrafiken_LVL1-12/graphics levels 13-15.jpg (Watershed-/Achsen-Separation, originalgetreu)"
+}

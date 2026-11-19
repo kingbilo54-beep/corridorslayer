@@ -1,0 +1,560 @@
+{
+ "zelle": {
+  "breite": 512,
+  "hoehe": 384,
+  "frames": 8,
+  "fps": 12,
+  "anker": [
+   336,
+   200
+  ]
+ },
+ "stufen": {
+  "1": {
+   "dateien": {
+    "body": [
+     512,
+     384
+    ],
+    "flame_sheet": [
+     512,
+     3072
+    ],
+    "glow_sheet": [
+     512,
+     3072
+    ],
+    "atlas": [
+     512,
+     3072
+    ]
+   },
+   "body_diag": 119.0,
+   "bodyzentrum": [
+    320,
+    193
+   ],
+   "flame_bbox_f0": [
+    275,
+    308,
+    161,
+    187
+   ],
+   "loop_diff_f7_f0": 0.01,
+   "transparent": true,
+   "meta_ok": true,
+   "ok": true
+  },
+  "2": {
+   "dateien": {
+    "body": [
+     512,
+     384
+    ],
+    "flame_sheet": [
+     512,
+     3072
+    ],
+    "glow_sheet": [
+     512,
+     3072
+    ],
+    "atlas": [
+     512,
+     3072
+    ]
+   },
+   "body_diag": 146.2,
+   "bodyzentrum": [
+    313,
+    188
+   ],
+   "flame_bbox_f0": [
+    256,
+    308,
+    150,
+    186
+   ],
+   "loop_diff_f7_f0": 0.03,
+   "transparent": true,
+   "meta_ok": true,
+   "ok": true
+  },
+  "3": {
+   "dateien": {
+    "body": [
+     512,
+     384
+    ],
+    "flame_sheet": [
+     512,
+     3072
+    ],
+    "glow_sheet": [
+     512,
+     3072
+    ],
+    "atlas": [
+     512,
+     3072
+    ]
+   },
+   "body_diag": 159.3,
+   "bodyzentrum": [
+    315,
+    190
+   ],
+   "flame_bbox_f0": [
+    255,
+    309,
+    145,
+    182
+   ],
+   "loop_diff_f7_f0": 0.05,
+   "transparent": true,
+   "meta_ok": true,
+   "ok": true
+  },
+  "4": {
+   "dateien": {
+    "body": [
+     512,
+     384
+    ],
+    "flame_sheet": [
+     512,
+     3072
+    ],
+    "glow_sheet": [
+     512,
+     3072
+    ],
+    "atlas": [
+     512,
+     3072
+    ]
+   },
+   "body_diag": 175.0,
+   "bodyzentrum": [
+    312,
+    191
+   ],
+   "flame_bbox_f0": [
+    245,
+    304,
+    144,
+    183
+   ],
+   "loop_diff_f7_f0": 0.05,
+   "transparent": true,
+   "meta_ok": true,
+   "ok": true
+  },
+  "5": {
+   "dateien": {
+    "body": [
+     512,
+     384
+    ],
+    "flame_sheet": [
+     512,
+     3072
+    ],
+    "glow_sheet": [
+     512,
+     3072
+    ],
+    "atlas": [
+     512,
+     3072
+    ]
+   },
+   "body_diag": 189.7,
+   "bodyzentrum": [
+    309,
+    188
+   ],
+   "flame_bbox_f0": [
+    235,
+    300,
+    139,
+    183
+   ],
+   "loop_diff_f7_f0": 0.04,
+   "transparent": true,
+   "meta_ok": true,
+   "ok": true
+  },
+  "6": {
+   "dateien": {
+    "body": [
+     512,
+     384
+    ],
+    "flame_sheet": [
+     512,
+     3072
+    ],
+    "glow_sheet": [
+     512,
+     3072
+    ],
+    "atlas": [
+     512,
+     3072
+    ]
+   },
+   "body_diag": 186.1,
+   "bodyzentrum": [
+    311,
+    187
+   ],
+   "flame_bbox_f0": [
+    239,
+    304,
+    136,
+    180
+   ],
+   "loop_diff_f7_f0": 0.04,
+   "transparent": true,
+   "meta_ok": true,
+   "ok": true
+  },
+  "7": {
+   "dateien": {
+    "body": [
+     512,
+     384
+    ],
+    "flame_sheet": [
+     512,
+     3072
+    ],
+    "glow_sheet": [
+     512,
+     3072
+    ],
+    "atlas": [
+     512,
+     3072
+    ]
+   },
+   "body_diag": 153.7,
+   "bodyzentrum": [
+    329,
+    195
+   ],
+   "flame_bbox_f0": [
+    234,
+    318,
+    128,
+    209
+   ],
+   "loop_diff_f7_f0": 0.24,
+   "transparent": true,
+   "meta_ok": true,
+   "ok": true
+  },
+  "8": {
+   "dateien": {
+    "body": [
+     512,
+     384
+    ],
+    "flame_sheet": [
+     512,
+     3072
+    ],
+    "glow_sheet": [
+     512,
+     3072
+    ],
+    "atlas": [
+     512,
+     3072
+    ]
+   },
+   "body_diag": 155.3,
+   "bodyzentrum": [
+    328,
+    195
+   ],
+   "flame_bbox_f0": [
+    232,
+    314,
+    128,
+    207
+   ],
+   "loop_diff_f7_f0": 0.22,
+   "transparent": true,
+   "meta_ok": true,
+   "ok": true
+  },
+  "9": {
+   "dateien": {
+    "body": [
+     512,
+     384
+    ],
+    "flame_sheet": [
+     512,
+     3072
+    ],
+    "glow_sheet": [
+     512,
+     3072
+    ],
+    "atlas": [
+     512,
+     3072
+    ]
+   },
+   "body_diag": 151.5,
+   "bodyzentrum": [
+    331,
+    196
+   ],
+   "flame_bbox_f0": [
+    236,
+    324,
+    129,
+    208
+   ],
+   "loop_diff_f7_f0": 0.22,
+   "transparent": true,
+   "meta_ok": true,
+   "ok": true
+  },
+  "10": {
+   "dateien": {
+    "body": [
+     512,
+     384
+    ],
+    "flame_sheet": [
+     512,
+     3072
+    ],
+    "glow_sheet": [
+     512,
+     3072
+    ],
+    "atlas": [
+     512,
+     3072
+    ]
+   },
+   "body_diag": 299.0,
+   "bodyzentrum": [
+    336,
+    200
+   ],
+   "flame_bbox_f0": [
+    157,
+    363,
+    39,
+    237
+   ],
+   "loop_diff_f7_f0": 5.11,
+   "transparent": true,
+   "meta_ok": true,
+   "ok": true
+  },
+  "11": {
+   "dateien": {
+    "body": [
+     512,
+     384
+    ],
+    "flame_sheet": [
+     512,
+     3072
+    ],
+    "glow_sheet": [
+     512,
+     3072
+    ],
+    "atlas": [
+     512,
+     3072
+    ]
+   },
+   "body_diag": 348.6,
+   "bodyzentrum": [
+    336,
+    200
+   ],
+   "flame_bbox_f0": [
+    138,
+    369,
+    52,
+    250
+   ],
+   "loop_diff_f7_f0": 6.43,
+   "transparent": true,
+   "meta_ok": true,
+   "ok": true
+  },
+  "12": {
+   "dateien": {
+    "body": [
+     512,
+     384
+    ],
+    "flame_sheet": [
+     512,
+     3072
+    ],
+    "glow_sheet": [
+     512,
+     3072
+    ],
+    "atlas": [
+     512,
+     3072
+    ]
+   },
+   "body_diag": 393.1,
+   "bodyzentrum": [
+    336,
+    200
+   ],
+   "flame_bbox_f0": [
+    137,
+    374,
+    64,
+    264
+   ],
+   "loop_diff_f7_f0": 7.37,
+   "transparent": true,
+   "meta_ok": true,
+   "ok": true
+  },
+  "13": {
+   "dateien": {
+    "body": [
+     512,
+     384
+    ],
+    "flame_sheet": [
+     512,
+     3072
+    ],
+    "glow_sheet": [
+     512,
+     3072
+    ],
+    "atlas": [
+     512,
+     3072
+    ]
+   },
+   "body_diag": 418.6,
+   "bodyzentrum": [
+    336,
+    200
+   ],
+   "flame_bbox_f0": [
+    117,
+    378,
+    54,
+    280
+   ],
+   "loop_diff_f7_f0": 11.32,
+   "transparent": true,
+   "meta_ok": true,
+   "ok": true
+  },
+  "14": {
+   "dateien": {
+    "body": [
+     512,
+     384
+    ],
+    "flame_sheet": [
+     512,
+     3072
+    ],
+    "glow_sheet": [
+     512,
+     3072
+    ],
+    "atlas": [
+     512,
+     3072
+    ]
+   },
+   "body_diag": 434.4,
+   "bodyzentrum": [
+    333,
+    200
+   ],
+   "flame_bbox_f0": [
+    59,
+    368,
+    12,
+    274
+   ],
+   "loop_diff_f7_f0": 13.94,
+   "transparent": true,
+   "meta_ok": true,
+   "ok": true
+  },
+  "15": {
+   "dateien": {
+    "body": [
+     512,
+     384
+    ],
+    "flame_sheet": [
+     512,
+     3072
+    ],
+    "glow_sheet": [
+     512,
+     3072
+    ],
+    "atlas": [
+     512,
+     3072
+    ]
+   },
+   "body_diag": 459.1,
+   "bodyzentrum": [
+    336,
+    200
+   ],
+   "flame_bbox_f0": [
+    73,
+    377,
+    6,
+    302
+   ],
+   "loop_diff_f7_f0": 15.66,
+   "transparent": true,
+   "meta_ok": true,
+   "ok": true
+  }
+ },
+ "pruefungen": {
+  "koerperdiagonale": {
+   "1": 119.0,
+   "2": 146.2,
+   "3": 159.3,
+   "4": 175.0,
+   "5": 189.7,
+   "6": 186.1,
+   "7": 153.7,
+   "8": 155.3,
+   "9": 151.5,
+   "10": 299.0,
+   "11": 348.6,
+   "12": 393.1,
+   "13": 418.6,
+   "14": 434.4,
+   "15": 459.1
+  },
+  "monoton_steigend_ab_lvl10": true,
+  "alle_15_stufen_ok": true
+ }
+}
