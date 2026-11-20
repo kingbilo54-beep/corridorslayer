@@ -43,6 +43,8 @@ class RegressionTests(unittest.TestCase):
         self.assertIn(game.state, (game.INTRO, game.MENU))
 
     def test_campaign_bosses_have_assets_and_configs(self):
+        self.assertLessEqual(set(pve.BOSS_TYPE_CFG) - {"dragon"},
+                             set(pve.BOSS_ATTACKS))
         for sector in range(6, 9):
             for stage in (5, 10, 15):
                 cfg = pve.boss_cfg_for(sector, stage)
@@ -124,9 +126,129 @@ class RegressionTests(unittest.TestCase):
         self.assertFalse(combat._in_player_range(normal))
         self.assertFalse(combat._in_player_range(boss))
         normal.x = 449
-        boss.x = pve.BOSS_TARGET_X - 1
         self.assertTrue(combat._in_player_range(normal))
+        boss.x = pve.BOSS_HOLD_X["void_lurker"] + 1
+        self.assertFalse(combat._in_player_range(boss))
+        boss.x = pve.BOSS_HOLD_X["void_lurker"]
         self.assertTrue(combat._in_player_range(boss))
+
+    def test_live_update_blocks_all_player_fire_during_boss_approach(self):
+        combat = pve.PvECombat(is_idle=False, stage_id=5)
+        boss = pve.Enemy("boss", 10000, 10000, 20, 34, 1,
+                         "interceptor", x=1000, y=270, is_boss=True)
+        combat.enemies = [boss]
+        combat.boss_ref = boss
+        combat.projectiles.append(pve.Projectile(
+            x=boss.x, y=boss.y, vx=0, vy=0, damage=500,
+            color=(255, 255, 255), size=5, speed=0, kind="player"))
+        combat.hangar_level = 4
+        combat.retaliate_timer = 2.0
+        starting_hp = boss.hp
+        for _ in range(30):
+            combat.update(1 / 30, center=(100, 270),
+                          cannon_positions=[(104, 256)] * 3)
+        self.assertGreater(boss.x, pve.BOSS_HOLD_X["interceptor"])
+        self.assertTrue(all(projectile.kind == "enemy"
+                            for projectile in combat.projectiles))
+        self.assertFalse(combat._in_player_range(boss))
+        self.assertEqual(boss.hp, starting_hp)
+
+    def test_each_normal_enemy_uses_its_own_live_projectile_mechanic(self):
+        for enemy_type, attack in pve.ENEMY_ATTACKS.items():
+            with self.subTest(enemy_type=enemy_type):
+                combat = pve.PvECombat(is_idle=False)
+                enemy = pve.Enemy(enemy_type, 1000, 1000, 8, 0, 1,
+                                  enemy_type, x=400, y=270)
+                enemy.attack_cooldown = 0
+                enemy.dash_cd = 100
+                combat.enemies = [enemy]
+                combat.update(.01, center=(100, 270))
+                shots = [p for p in combat.projectiles if p.kind == "enemy"]
+                self.assertEqual(len(shots), attack["count"])
+                self.assertEqual({p.projectile_type for p in shots},
+                                 {attack["projectile"]})
+                self.assertEqual({p.motion for p in shots},
+                                 {attack.get("motion", "straight")})
+
+    def test_live_boss_attack_state_machines_fire_multiple_telegraphed_waves(self):
+        for enemy_type, attacks in pve.BOSS_ATTACKS.items():
+            with self.subTest(enemy_type=enemy_type):
+                combat = pve.PvECombat(is_idle=False)
+                boss = pve.Enemy(enemy_type, 1e9, 1e9, 20, 20, 1,
+                                 enemy_type, x=pve.BOSS_HOLD_X.get(enemy_type, 440),
+                                 y=270, is_boss=True)
+                boss.boss_attack_timer = .1
+                combat.enemies = [boss]
+                combat.boss_ref = boss
+                phases = set()
+                fired = 0
+                attack_starts = []
+                last_phase = "rest"
+                used_attacks = set()
+                for frame in range(600):
+                    before = boss.volley
+                    combat.update(.05, center=(100, 270))
+                    phases.add(boss.boss_attack_phase)
+                    fired += boss.volley - before
+                    if boss.boss_attack_phase == "telegraph" and last_phase != "telegraph":
+                        attack_starts.append(frame * .05)
+                        used_attacks.add(boss.boss_attack_key)
+                    last_phase = boss.boss_attack_phase
+                self.assertGreaterEqual(fired, 3)
+                self.assertTrue({"telegraph", "fire", "recovery"}.issubset(phases))
+                self.assertGreaterEqual(len(used_attacks), 2)
+                self.assertTrue(all(b - a > 1.0
+                                    for a, b in zip(attack_starts, attack_starts[1:])))
+                self.assertEqual(used_attacks, {a["name"] for a in attacks})
+
+    def test_projectile_visual_types_render_on_live_fx_path(self):
+        from combat_fx import CombatFX
+        combat = pve.PvECombat(is_idle=False)
+        kinds = {attack["projectile"] for attack in pve.ENEMY_ATTACKS.values()}
+        kinds.update(a["projectile"] for rows in pve.BOSS_ATTACKS.values()
+                     for a in rows)
+        combat.projectiles = [pve.Projectile(
+            x=80 + index * 24, y=100, vx=1, vy=.15, damage=5,
+            color=(100, 210, 255), size=5, kind="enemy",
+            projectile_type=kind, impact_radius=24 if kind == "rocket" else 0)
+            for index, kind in enumerate(sorted(kinds))]
+        surface = pygame.Surface((640, 540), pygame.SRCALPHA)
+        CombatFX().draw(surface, combat, lambda x, y: (x, y), 1.0, 0.0)
+        self.assertGreater(sum(surface.get_at((x, 100)).a > 0
+                               for x in range(640)), 0)
+
+    def test_live_dragon_cycles_breath_secondary_attacks_and_rage(self):
+        prior = pve.random.getstate()
+        pve.random.seed(4421)
+        try:
+            combat = pve.PvECombat(is_idle=False, stage_id=15)
+            dragon = pve.Enemy("dragon", 100000, 100000, 26, 30, 1,
+                               "dragon", x=pve.BOSS_HOLD_X["dragon"],
+                               y=270, is_boss=True)
+            dragon.boss_cd = .1
+            dragon.atk_cd = .1
+            combat.enemies = [dragon]
+            combat.boss_ref = dragon
+            breaths = bombs = spikes = 0
+            previous_breath = previous_kind = 0
+            for frame in range(900):
+                combat.update(1 / 30, center=(100, 270))
+                if dragon.breath_phase == 1 and previous_breath == 0:
+                    breaths += 1
+                previous_breath = dragon.breath_phase
+                if dragon.atk_kind in (2, 3) and previous_kind == 0:
+                    bombs += dragon.atk_kind == 2
+                    spikes += dragon.atk_kind == 3
+                previous_kind = dragon.atk_kind
+                if frame == 420:
+                    dragon.hp = dragon.max_hp * .49
+            self.assertGreaterEqual(breaths, 2)
+            self.assertGreater(bombs, 0)
+            self.assertGreater(spikes, 0)
+            self.assertTrue(dragon.enraged)
+            self.assertTrue(combat.boss_bombs or combat.boss_spikes or breaths >= 2)
+        finally:
+            pve.random.setstate(prior)
 
     def test_boss_spawn_uses_stage_assignment_and_phase_sprite(self):
         combat = pve.PvECombat(is_idle=False, campaign_id=8, stage_id=15)
@@ -169,6 +291,13 @@ class RegressionTests(unittest.TestCase):
         write_json(path, {"credits": 42, "levels": {"antrieb": 15}})
         self.assertEqual(read_json(path),
                          {"credits": 42, "levels": {"antrieb": 15}})
+
+    def test_player_regeneration_never_exceeds_max_hp(self):
+        combat = pve.PvECombat(is_idle=True)
+        combat.repair_level = 15
+        combat.player_hp = combat.max_player_hp - .01
+        combat.update(.1, center=(100, 270))
+        self.assertEqual(combat.player_hp, combat.max_player_hp)
 
 
 if __name__ == "__main__":

@@ -1632,10 +1632,30 @@ def _boss_bomb_pos(b, k):
     return wx, wy
 
 
-def _draw_boss_attacks(surface, combat, T, s, now_ms, ship_x=None):
+def _draw_boss_attacks(surface, combat, T, s, now_ms, ship_x=None, ship_y=270.0):
     for enemy in combat.enemies:
         if not enemy.is_boss:
             continue
+        if enemy.boss_attack_phase == "telegraph" and enemy.boss_attack_timer > 0:
+            attack = next((a for a in pve_sys.BOSS_ATTACKS.get(enemy.enemy_type, ())
+                           if a["name"] == enemy.boss_attack_key), None)
+            if attack:
+                bx, by = T(enemy.x, enemy.y)
+                aim_x, aim_y = T(ship_x if ship_x is not None else 100.0, ship_y)
+                pulse = .5 + .5 * math.sin(now_ms * .018)
+                tele_col = (255, 205, 100) if attack["projectile"] in ("rocket", "laser") else enemy.boss_col
+                if attack["pattern"] in ("radial", "spiral", "cross"):
+                    radius = int((34 + 12 * pulse) * s)
+                    pygame.draw.circle(surface, tele_col, (int(bx), int(by)), radius, 2)
+                    pygame.draw.circle(surface, (255, 245, 210), (int(bx), int(by)),
+                                       max(2, radius // 3), 1)
+                else:
+                    pygame.draw.line(surface, tele_col, (int(bx), int(by)),
+                                     (int(aim_x), int(aim_y)), max(1, int((1 + pulse) * s)))
+                    radius = int((15 + 8 * pulse) * s)
+                    pygame.draw.circle(surface, tele_col, (int(aim_x), int(aim_y)), radius, 2)
+                    pygame.draw.circle(surface, (255, 245, 210), (int(aim_x), int(aim_y)),
+                                       max(2, radius // 3), 1)
         # ---------- GLUTBOMBEN: Telegraf ----------
         if enemy.atk_kind == 2 and enemy.atk_t > 0 and (enemy.bomb_marks or []):
             prog = 1.0 - max(0.0, enemy.atk_t) / pve_sys.BOMB_TELEGRAPH_S
@@ -5512,7 +5532,8 @@ class Game:
             _draw_dragon_breath(SCREEN, _db, T, s, ship_x, ship_y, _now_ms)
         # PAKET 8.8c: Zusatz-Angriffe (GLUTBOMBEN / EISSPIESSE) rendern -
         # ebenfalls nach der Gegner-Schleife, ueber dem Hintergrund.
-        _draw_boss_attacks(SCREEN, combat, T, s, _now_ms, ship_x=ship_x)
+        _draw_boss_attacks(SCREEN, combat, T, s, _now_ms,
+                           ship_x=ship_x, ship_y=ship_y)
 
         target = min(combat.enemies, key=lambda e: e.x) if combat.enemies else None
         # PAKET 7E: Der Geschuetzturm zeigt jetzt die WAFFEN-Stufe (Modul

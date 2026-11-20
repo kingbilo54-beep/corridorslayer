@@ -294,6 +294,26 @@ ENEMY_BEHAVIOR = {
                         pattern="fan"),        # 3er-Faecher-Salve
 }
 
+# Every roster type has a distinct attack mechanic in addition to its
+# movement/cooldown tuning. Shapes and trajectories are also consumed by FX.
+ENEMY_ATTACKS = {
+    "skitter": dict(projectile="needle", count=1, spread=0, motion="straight"),
+    "lancer": dict(projectile="laser", count=1, spread=0, motion="straight"),
+    "interceptor": dict(projectile="needle", count=2, spread=8, motion="straight"),
+    "bomber": dict(projectile="rocket", count=1, spread=0, motion="straight", impact=34),
+    "frigate": dict(projectile="plasma", count=3, spread=16, motion="straight"),
+    "destroyer": dict(projectile="rocket", count=2, spread=12, motion="straight", impact=42),
+    "stalker": dict(projectile="pulse", count=3, spread=24, motion="straight"),
+    "medusa": dict(projectile="laser", count=3, spread=32, motion="straight"),
+    "carrier": dict(projectile="orb", count=4, spread=38, motion="homing"),
+    "eye": dict(projectile="orb", count=1, spread=0, motion="homing"),
+    "crystal": dict(projectile="ice", count=5, spread=52, motion="straight"),
+    "shard": dict(projectile="shard", count=2, spread=10, motion="sine", split=.85),
+    "wraith": dict(projectile="phase", count=1, spread=0, motion="sine"),
+    "husk": dict(projectile="rocket", count=1, spread=0, motion="straight", impact=28),
+    "hive": dict(projectile="plasma", count=3, spread=28, motion="straight"),
+}
+
 # FX-Palette je Typ (Treffer-Glitzer + Explosionsfarbe) - passend zur
 # vorhandenen Sprite-Palette, keine neuen Assets:
 ENEMY_FX_COL = {
@@ -397,6 +417,68 @@ BOSS_TYPE_CFG = {
         "heavy": False, "extra_attacks": (2,), "attack_range": 720.0},
 }
 
+
+def _boss_attack(name, pattern, projectile, count, spread, windup,
+                 waves, wave_gap, recovery, cooldown, damage_mult=1.0,
+                 speed_mult=1.0, size_add=0, motion="straight"):
+    return {"name": name, "pattern": pattern, "projectile": projectile,
+            "count": count, "spread": spread, "windup": windup,
+            "waves": waves, "wave_gap": wave_gap, "recovery": recovery,
+            "cooldown": cooldown, "damage_mult": damage_mult,
+            "speed_mult": speed_mult, "size_add": size_add,
+            "motion": motion}
+
+
+# Two visibly telegraphed primary attacks per non-dragon boss. These are
+# executed by PvECombat.update; `pattern` selects projectile trajectories,
+# while timing fields define wind-up, repeated active waves, recovery and rest.
+BOSS_ATTACKS = {
+    "interceptor": (
+        _boss_attack("target_lances", "aimed", "laser", 1, 0, .42, 3, .24, .55, (1.15, 1.5), .72, 1.2),
+        _boss_attack("violet_fan", "fan", "plasma", 5, 42, .66, 1, .1, .65, (1.65, 2.0), .78),
+    ),
+    "brute": (
+        _boss_attack("siege_rockets", "aimed", "rocket", 2, 10, .9, 2, .48, .85, (1.8, 2.2), 1.2, .78, 3),
+        _boss_attack("heavy_ring", "radial", "plasma", 8, 360, .72, 1, .1, .9, (2.0, 2.4), .92, .86, 2),
+    ),
+    "astral_centaur": (
+        _boss_attack("astral_lances", "aimed", "laser", 1, 0, .52, 3, .26, .55, (1.25, 1.6), .74, 1.25),
+        _boss_attack("starfall_fan", "fan", "ice", 7, 80, .78, 1, .1, .72, (1.8, 2.2), .82, .92),
+    ),
+    "colossal_armadillo": (
+        _boss_attack("rolling_shells", "aimed", "rocket", 2, 14, .95, 2, .55, .95, (2.0, 2.5), 1.15, .72, 3),
+        _boss_attack("shell_burst", "radial", "shard", 10, 360, .72, 1, .1, .9, (2.3, 2.7), .82, .9),
+    ),
+    "corrupted_gryphon": (
+        _boss_attack("talon_dive", "aimed", "needle", 3, 12, .34, 2, .2, .45, (1.05, 1.35), .68, 1.25),
+        _boss_attack("wing_sweep", "fan", "plasma", 9, 104, .6, 1, .1, .55, (1.45, 1.8), .62, 1.08),
+    ),
+    "dreadmaw_behemoth": (
+        _boss_attack("maw_barrage", "fan", "rocket", 5, 44, .78, 2, .42, .9, (1.8, 2.2), .95, .78, 2),
+        _boss_attack("shock_ring", "radial", "pulse", 9, 360, .66, 1, .1, .85, (2.1, 2.5), .9, .8, 2),
+    ),
+    "obsidian_mantis": (
+        _boss_attack("cross_lasers", "cross", "laser", 4, 90, .62, 2, .38, .62, (1.55, 1.9), .74, 1.05),
+        _boss_attack("scissor_shards", "fan", "shard", 6, 58, .48, 2, .3, .65, (1.8, 2.2), .8, 1.0),
+    ),
+    "primordial_serpent": (
+        _boss_attack("serpent_wave", "wave", "plasma", 7, 74, .58, 2, .34, .62, (1.45, 1.8), .7, .92, 0, "sine"),
+        _boss_attack("coil_orbs", "aimed", "orb", 3, 16, .72, 1, .1, .7, (1.7, 2.1), .86, .78, 1, "homing"),
+    ),
+    "shadow_weave": (
+        _boss_attack("web_spiral", "spiral", "shard", 9, 360, .55, 2, .34, .68, (1.45, 1.8), .65, .95),
+        _boss_attack("void_mines", "fan", "orb", 5, 62, .8, 1, .1, .8, (1.9, 2.3), .96, .7, 2, "sine"),
+    ),
+    "spire_walker": (
+        _boss_attack("pillar_laser", "aimed", "laser", 1, 0, 1.0, 2, .7, .95, (2.0, 2.5), 1.55, .88, 4),
+        _boss_attack("spire_shards", "radial", "ice", 12, 360, .72, 1, .1, .85, (2.2, 2.6), .84, .92),
+    ),
+    "void_lurker": (
+        _boss_attack("seeking_void", "aimed", "orb", 4, 22, .72, 2, .4, .8, (1.75, 2.1), .76, .72, 2, "homing"),
+        _boss_attack("eclipse_burst", "radial", "ice", 10, 360, .58, 2, .42, .75, (1.95, 2.35), .72, .95),
+    ),
+}
+
 # AUFTRAG 19 (PUNKT 2): Eigenstaendige Boss-Belegung der SEKTOREN 6-8.
 # Sektor 1-5 bleiben bei BOSS_DATA (unveraendert). Fuer 6-8 wird dieselbe
 # Drei-Bosse-Struktur (Stufe 5/10/15) mit den VORHANDENEN drei Boss-Typen
@@ -497,6 +579,7 @@ BOSS_HIT_R = {"interceptor": 46, "brute": 54, "dragon": 110,
 #     Mitte (Maul->Schiff ~470-520 < 720).
 ENEMY_ATTACK_RANGE = 720.0
 BREATH_START_RANGE = 760.0
+BOSS_RUNTIME_DPS_FACTOR = 0.65
 
 # PAKET 8.8b: FLAMMENDER ATEM des EISDRACHEN. Der Drache benutzt KEINE
 # Kugel-Projektile mehr (Nutzerwunsch: "Ein Strahl waere richtig hammer.
@@ -532,8 +615,8 @@ BREATH_CD_RAGE = (1.7, 2.3) # ... in der Wut-Phase
 #                 kein Ueberlapp mehr. Der Drache greift ab
 #                 BREATH_START_RANGE 760 schon im Anflug an und ist
 #                 trotzdem nie schutzlos, bevor er zuschlaegt.
-#                 Targeting: seit BOSS-FEUERFERNHE zielbar ab
-#                 BOSS_TARGET_X 780 (_in_player_range unten).
+#                 Targeting: erst an der jeweils konfigurierten
+#                 Halteposition (_in_player_range unten).
 #                 interceptor/brute: 440/445 (schmale Sprites 150/195
 #                 px, kein Ueberlapp - kein Grund zu aendern).
 #   BOSS_MOVE_* : echte Auf/Ab-Bewegung (vorher nur 4 px Zeichnungs-Bob):
@@ -555,29 +638,14 @@ BOSS_MOVE_SPD = 0.42         # rad/s -> ~15 s pro Haupt-Schwingung
 BOSS_MOVE_SPD2 = 0.83        # zweite Welle
 BOSS_Y_MIN, BOSS_Y_MAX = 150.0, 390.0
 
-# AUFTRAG BOSS-FEUERFERNHE (Nutzer: "der Boss wird immernoch aus zu
-# grosser Entfernung angegriffen, dass einmal fixen"): Bosse spawnen
-# bei x=1000 und waren bisher via is_boss-Ausnahme AB SPAWN zielbar -
-# Kanonen/Drohnen haben sie also ueber den halben Bildschirm hinweg
-# unter Beschuss genommen, noch BEVOR der Kampf ueberhaupt begann.
-# Zwei Stellschrauben:
-#   BOSS_TARGET_X       : Spieler-Feuer (Kanonen, Drohnen, Vergeltungs-
-#                 Pulse) zielt Bosse erst, WENN SIE DIESE LINIE
-#                 PASSIEREN (780). Der Drache haelt bei 640, Inter-
-#                 ceptor/Brute bei 440/445 - alle sind also IMMER
-#                 zielbar, sobald der Kampf wirklich laeuft. Eigene
-#                 Boss-Angriffe starten frueher (ENEMY_ATTACK_RANGE
-#                 720 -> x < 840): der Boss schlaegt im Anflug zuerst
-#                 zu, das Schiff antwortet, sobald er wirklich "da"
-#                 ist. EINE Regel fuer alles: _in_player_range().
-#   BOSS_APPROACH_BOOST : Anflug-Tempo AUSSERHALB der Zielrange (x >
-#                 BOSS_TARGET_X). Ohne Boost waere die Schonfrist eine
-#                 8-9 s WARTESCHLEIFE (Drache: 1000 -> 780 bei Speed
-#                 26). Mit 2.4x rast der Boss dramatisch heran und
-#                 schaltet ab der Zielrange aufs gleitende Kampf-
-#                 tempo zurueck.
-BOSS_TARGET_X = 780.0
+# Player targetability is locked to the configured encounter position.
+# The previous absolute BOSS_TARGET_X line allowed fire during the approach.
 BOSS_APPROACH_BOOST = 2.4
+BOSS_APPROACH_SLOWDOWN = 90.0
+
+# Desired actual fight duration before the campaign progression factor.
+BOSS_TARGET_FIGHT_SECONDS = {5: 42.0, 10: 65.0, 15: 90.0}
+BOSS_SECTOR_TTK_STEP = 0.045
 
 BOMB_TELEGRAPH_S = 0.55      # Mund gloht, Zielmarken pulsieren (s)
 BOMB_COUNT = 3               # +2 in der Wut-Phase
@@ -651,6 +719,12 @@ def boss_stats_for_stage(stage_id, campaign_id=1):
     dmg = float(cfg["damage"]) * BAL_ENEMY_DMG * campaign_dmg_mult(campaign_id)
     reward = int(round(float(cfg["reward"]) * campaign_reward_mult(campaign_id)))
     return hp, dmg, reward
+
+
+def boss_target_fight_seconds(stage_id, campaign_id=1):
+    """Target TTK, increasing across both boss tiers and campaign sectors."""
+    base = BOSS_TARGET_FIGHT_SECONDS.get(int(stage_id), 60.0)
+    return base * (1.0 + max(0, int(campaign_id) - 1) * BOSS_SECTOR_TTK_STEP)
 
 
 def stage_late_hp_factor(stage_id):
@@ -731,6 +805,12 @@ class Enemy:
     mouth_open: bool = False   # Maul-Zustand (Drachen-Sprite offen/geschlossen)
     visual_type: str = ""     # Boss-Phase kann eigenes Sprite verwenden
     phase_visual: str = ""    # Sprite nach Erreichen der Rage-Phase
+    boss_attack_phase: str = "rest"  # rest -> telegraph -> fire -> recovery
+    boss_attack_key: str = ""
+    boss_attack_index: int = 0
+    boss_attack_timer: float = 0.0
+    boss_attack_waves_left: int = 0
+    boss_attack_waves_fired: int = 0
     # AUFTRAG 21: Typ-eigene Bewegung & Angriffsmuster (Normal-Gegner)
     mv_phase: float = 0.0      # Phasenversatz Bob/Sway (Random je Spawn)
     pattern: str = "shot"      # "shot" (klassisch) | "zigzag" | "dash" | "kamikaze" | "fan"
@@ -750,6 +830,14 @@ class Projectile:
     speed: float = 550.0
     kind: str = "player"
     is_drone: bool = False
+    projectile_type: str = "plasma"
+    motion: str = "straight"
+    age: float = 0.0
+    origin_y: float = 0.0
+    amplitude: float = 0.0
+    impact_radius: float = 0.0
+    split_after: float = 0.0
+    has_split: bool = False
 
 @dataclass
 class Particle:
@@ -971,7 +1059,8 @@ class PvECombat:
             # ist bewusst ausgenommen (Spezialfaehigkeit, kein Schuss).
             ziel = None
             for e in self.enemies:
-                if e.hp > 0 and (ziel is None or e.x < ziel.x):
+                if (e.hp > 0 and self._in_player_range(e)
+                        and (ziel is None or e.x < ziel.x)):
                     ziel = e
             if ziel is None:
                 return False
@@ -1109,16 +1198,16 @@ class PvECombat:
         self.spawn_timer = 2.0
 
     def _in_player_range(self, e):
-        """AUFTRAG BOSS-FEUERFERNHE: EINE Zielrange-Regel fuer ALLES
-        Spieler-Feuer (Kanonen-Salven, Drohnen, Vergeltungs-Pulse).
-        Normalgegner: ab x < 450 zielbar (wie gehabt). Bosse: erst ab
-        BOSS_TARGET_X (780) - sie spawnen bei x=1000 und wurden vorher
-        ueber den halben Bildschirm hinweg beschossen, noch bevor der
-        Kampf begonnen hat. Eigene Boss-Angriffe starten frueher
-        (ENEMY_ATTACK_RANGE 720 -> x < 840): der Boss schlaegt zuerst
-        zu, das Schiff antwortet, sobald er wirklich 'da' ist."""
+        """Shared target gate for cannon, drone, retaliation and active skills.
+
+        Normal enemies retain their existing x-based gate. A boss is
+        targetable only after its own movement has reached BOSS_HOLD_X.
+        This deliberately uses the encounter position, not a global world-X
+        threshold or a separate rule per weapon source.
+        """
         if e.is_boss:
-            return e.x < BOSS_TARGET_X
+            hold_x = BOSS_HOLD_X.get(e.enemy_type, 400.0)
+            return e.x <= hold_x + 0.5
         return e.x < 450.0
 
     def _spawn_single_enemy(self):
@@ -1135,6 +1224,10 @@ class PvECombat:
             b_hp, b_dmg, b_reward = boss_stats_for_stage(self.stage_id,
                                                          self.campaign_id)
             hp = b_hp
+            live_dps = self.total_dps(float(boss_cfg["dr"]))
+            target_ttk = boss_target_fight_seconds(
+                self.stage_id, self.campaign_id)
+            hp = max(hp, live_dps * target_ttk * BOSS_RUNTIME_DPS_FACTOR)
             speed = float(boss_cfg["speed"])
             damage = int(b_dmg)
             reward = b_reward
@@ -1215,7 +1308,9 @@ class PvECombat:
         if is_b:                          # PAKET 8.8: Boss-Metadaten
             e.is_boss = True
             e.dr = float(boss_cfg["dr"])
-            e.boss_cd = 2.2               # kurze Schonfrist nach Einzug
+            e.boss_cd = 0.25              # erster Angriff kurz nach Einzug
+            e.boss_attack_phase = "rest"
+            e.boss_attack_timer = 0.35
             e.boss_col = boss_cfg["col"]
             e.visual_type = e_type
             e.phase_visual = str(boss_cfg.get("phase_type", ""))
@@ -1280,6 +1375,74 @@ class PvECombat:
                 size=cfg["size"] + 2, speed=cfg["b_speed"] * 1.12,
                 kind="enemy"))
         e.boss_cd = random.uniform(*cfg["cadence"]) * (0.72 if e.enraged else 1.0)
+
+    def _fire_boss_attack(self, e, attack, cx, cy):
+        """Emit one authored wave for the boss attack currently in `fire`."""
+        dx, dy = cx - e.x, cy - e.y
+        aim = math.atan2(dy, dx)
+        count = int(attack["count"] + (2 if e.enraged and attack["pattern"] in ("fan", "radial") else 0))
+        pattern = attack["pattern"]
+        for i in range(count):
+            if pattern == "radial":
+                angle = math.tau * i / count + e.boss_attack_waves_fired * 0.12
+            elif pattern == "spiral":
+                angle = math.tau * i / count + e.volley * 0.28
+            elif pattern == "cross":
+                angle = aim + math.pi * 0.5 * i
+            elif pattern == "wave":
+                angle = aim + math.radians(attack["spread"]) * (i / max(1, count - 1) - .5)
+                if i % 2:
+                    angle += math.radians(9)
+            elif pattern == "fan":
+                angle = aim + math.radians(attack["spread"]) * (i / max(1, count - 1) - .5)
+            else:
+                angle = aim + math.radians(attack["spread"]) * (i / max(1, count - 1) - .5)
+            self.projectiles.append(Projectile(
+                x=e.x, y=e.y, vx=math.cos(angle), vy=math.sin(angle),
+                damage=max(1, int(e.damage * attack["damage_mult"]
+                                  * (1.12 if e.enraged else 1.0))),
+                color=e.boss_col, size=max(3, BOSS_TYPE_CFG.get(e.enemy_type, {}).get("size", 6)
+                                           + attack["size_add"]),
+                speed=BOSS_TYPE_CFG.get(e.enemy_type, {}).get("b_speed", 250.0)
+                      * attack["speed_mult"] * (1.12 if e.enraged else 1.0),
+                kind="enemy", projectile_type=attack["projectile"],
+                motion=attack["motion"], impact_radius=18.0 if attack["projectile"] == "rocket" else 0.0,
+                split_after=.9 if attack["projectile"] == "shard" else 0.0))
+        e.volley += 1
+        e.boss_attack_waves_fired += 1
+        e.boss_attack_waves_left -= 1
+        e.boss_attack_phase = "fire" if e.boss_attack_waves_left > 0 else "recovery"
+        e.boss_attack_timer = (attack["wave_gap"] if e.boss_attack_waves_left > 0
+                               else attack["recovery"])
+
+    def _update_boss_attack(self, e, cx, cy, dt):
+        """Telegraphed, multi-wave boss attack state machine."""
+        attacks = BOSS_ATTACKS.get(e.enemy_type)
+        if not attacks:
+            e.boss_cd = max(0.0, e.boss_cd - dt)
+            if e.boss_cd <= 0:
+                self._boss_shoot(e, cx, cy)
+            return
+        e.boss_attack_timer -= dt
+        if e.boss_attack_phase == "rest":
+            if e.boss_attack_timer <= 0:
+                e.boss_attack_index = (e.boss_attack_index + (1 if e.boss_attack_key else 0)) % len(attacks)
+                attack = attacks[e.boss_attack_index]
+                e.boss_attack_key = attack["name"]
+                e.boss_attack_phase = "telegraph"
+                e.boss_attack_timer = max(.18, attack["windup"] * (.78 if e.enraged else 1.0))
+                e.boss_attack_waves_left = attack["waves"] + (1 if e.enraged and attack["waves"] > 1 else 0)
+                e.boss_attack_waves_fired = 0
+        elif e.boss_attack_phase == "telegraph" and e.boss_attack_timer <= 0:
+            self._fire_boss_attack(e, attacks[e.boss_attack_index], cx, cy)
+        elif e.boss_attack_phase == "fire" and e.boss_attack_timer <= 0:
+            self._fire_boss_attack(e, attacks[e.boss_attack_index], cx, cy)
+        elif e.boss_attack_phase == "recovery" and e.boss_attack_timer <= 0:
+            attack = attacks[e.boss_attack_index]
+            lo, hi = attack["cooldown"]
+            scale = .78 if e.enraged else 1.0
+            e.boss_attack_phase = "rest"
+            e.boss_attack_timer = random.uniform(lo, hi) * scale
 
     def _dragon_breath(self, e, cx, cy, dt, dist_to_ship):
         """PAKET 8.8b: FLAMMENDER ATEM des Eisdrachen. Kein Kugel-Projektil
@@ -1633,6 +1796,7 @@ class PvECombat:
                 self.player_hp += (self.repair_level * rep_val) * dt
         if self.is_idle and self.player_hp < self.max_player_hp:
             self.player_hp += 20 * dt
+        self.player_hp = min(self.max_player_hp, self.player_hp)
 
         # NEU PAKET 4: Uebertaktungs-Timer + Vergeltungs-Pulse
         if self.overdrive_cd > 0:
@@ -1690,11 +1854,10 @@ class PvECombat:
                 # anderen Gegner behandeln (keine Bonus-Reichweite mehr).
                 stop_x = BOSS_HOLD_X.get(e.enemy_type, 400.0)
                 if e.x > stop_x:
-                    # BOSS-FEUERFERNHE: ausserhalb der Zielrange (x >
-                    # BOSS_TARGET_X) rast der Anflug mit 2.4x - die
-                    # Schonfrist wird nicht zur Warteschleife. Ab der
-                    # Zielrange gleitet der Boss im normalen Kampftempo.
-                    cruise = BOSS_APPROACH_BOOST if e.x > BOSS_TARGET_X else 1.0
+                    # Accelerate most of the approach, then ease into the
+                    # authored position so the encounter lock is predictable.
+                    cruise = (BOSS_APPROACH_BOOST
+                              if e.x > stop_x + BOSS_APPROACH_SLOWDOWN else 1.0)
                     e.x -= e.speed * cruise * dt
                 else:
                     e.x = stop_x
@@ -1752,68 +1915,55 @@ class PvECombat:
                         * bh["sway_amp"] * dt
 
             dist_to_ship = math.hypot(cx - e.x, cy - e.y)
-            # RANGE-FIX: 550 -> ENEMY_ATTACK_RANGE (720). Gegner und
-            # Bosse greifen jetzt schon im Anflug an - vorher starben
-            # langsame Bosse (Speed 26-34) oft, bevor sie je in
-            # Reichweite kamen ("der Drache kommt nicht zum angreifen").
-            attack_range = (BOSS_TYPE_CFG.get(e.enemy_type, {}).get(
-                "attack_range", ENEMY_ATTACK_RANGE) if e.is_boss
-                else ENEMY_ATTACK_RANGE)
-            if dist_to_ship < attack_range:
+            # Boss combat starts at its actual encounter position. Normal
+            # enemies retain their previous attack-range behavior.
+            if e.is_boss and self._in_player_range(e):
                 # PAKET 8.8: Bosse feuern Faecher-Salven (_boss_shoot),
                 # Normalgegner wie gehabt einen gezielten Schuss.
                 # PAKET 8.8b: Der EISDRACHE hat den FLAMMEN-ATEM statt
                 # Kugel-Faechern (Strahl, telegrafiert, Schaden pro Tick).
                 # PAKET 8.8c: ZUSAETZLICH im eigenen Rhythmus GLUTBOMBEN
                 # bzw. EISSPIESSE (_boss_extra_attack) -> keine Monotonie.
-                if e.is_boss:
-                    if e.enemy_type == "dragon":
-                        self._dragon_breath(e, cx, cy, dt, dist_to_ship)
-                    else:
-                        e.boss_cd -= dt
-                        if e.boss_cd <= 0:
-                            self._boss_shoot(e, cx, cy)
-                    self._boss_extra_attack(e, cx, cy, dt, dist_to_ship)
+                if e.enemy_type == "dragon":
+                    self._dragon_breath(e, cx, cy, dt, dist_to_ship)
                 else:
-                    e.attack_cooldown -= dt
-                    if e.attack_cooldown <= 0:
-                        # AUFTRAG 21: Feuerrate/Projektil-Tempo/-Groesse je
-                        # Typ; HIVE = 3er-Faecher, SHARD = Doppel-Schuss.
-                        bh = ENEMY_BEHAVIOR.get(e.enemy_type)
-                        cd_band = bh["cd"] if bh else (1.5, 3.0)
-                        p_speed = bh["proj_speed"] if bh else 250.0
-                        p_size = bh["proj_size"] if bh else 5
-                        p_col = ENEMY_FX_COL.get(e.enemy_type, (255, 0, 0))
-                        e.attack_cooldown = random.uniform(*cd_band)
-                        dx, dy = cx - e.x, cy - e.y
-                        dist = math.hypot(dx, dy) or 1
-                        b_vx, b_vy = dx / dist, dy / dist
-                        offsets = (0.0,)
-                        if bh and bh.get("pattern") == "fan":
-                            offsets = (-0.20, 0.0, 0.20)   # hive: Faecher
-                        elif bh and bh.get("pattern") == "zigzag":
-                            offsets = (-0.10, 0.10)        # shard: Doppelschuss
-                        for off in offsets:
-                            ca, sa = math.cos(off), math.sin(off)
-                            self.projectiles.append(
-                                Projectile(x=e.x, y=e.y,
-                                           vx=b_vx * ca - b_vy * sa,
-                                           vy=b_vx * sa + b_vy * ca,
-                                           damage=e.damage, color=p_col,
-                                           size=p_size, speed=p_speed,
-                                           kind="enemy"))
+                    self._update_boss_attack(e, cx, cy, dt)
+                self._boss_extra_attack(e, cx, cy, dt, dist_to_ship)
+            elif dist_to_ship < ENEMY_ATTACK_RANGE:
+                e.attack_cooldown -= dt
+                if e.attack_cooldown <= 0:
+                    bh = ENEMY_BEHAVIOR.get(e.enemy_type)
+                    cd_band = bh["cd"] if bh else (1.5, 3.0)
+                    p_speed = bh["proj_speed"] if bh else 250.0
+                    p_size = bh["proj_size"] if bh else 5
+                    p_col = ENEMY_FX_COL.get(e.enemy_type, (255, 0, 0))
+                    e.attack_cooldown = random.uniform(*cd_band)
+                    dx, dy = cx - e.x, cy - e.y
+                    dist = math.hypot(dx, dy) or 1
+                    b_vx, b_vy = dx / dist, dy / dist
+                    attack = ENEMY_ATTACKS.get(e.enemy_type,
+                                               dict(projectile="plasma", count=1, spread=0, motion="straight"))
+                    count = attack["count"]
+                    for i in range(count):
+                        off = math.radians(attack["spread"]) * (i / max(1, count - 1) - .5)
+                        ca, sa = math.cos(off), math.sin(off)
+                        self.projectiles.append(
+                            Projectile(x=e.x, y=e.y,
+                                       vx=b_vx * ca - b_vy * sa,
+                                       vy=b_vx * sa + b_vy * ca,
+                                       damage=e.damage, color=p_col,
+                                       size=p_size, speed=p_speed,
+                                       kind="enemy", projectile_type=attack["projectile"],
+                                       motion=attack.get("motion", "straight"),
+                                       impact_radius=attack.get("impact", 0),
+                                       split_after=attack.get("split", 0)))
 
         # AUFTRAG BOSS-ABSTAND: Der Drache haelt bei 640 (BOSS_HOLD_X)
         # - ausserhalb der Normal-Zielrange 450, aber ohne Ueberlapp
         # mit dem Schiff (Festung ~40..200).
-        # AUFTRAG BOSS-FEUERFERNHE (Nutzer: "der Boss wird immernoch
-        # aus zu grosser Entfernung angegriffen"): Bosse sind NICHT
-        # MEHR ab Spawn (x=1000) zielbar. Alles Spieler-Feuer (Kanonen,
-        # Drohnen, Vergeltungspulse) greift erst ab BOSS_TARGET_X 780
-        # - EINE Regel in _in_player_range(). Der Boss schlaegt im
-        # Anflug trotzdem zuerst zu (Atem ab x < 840) und rast mit
-        # 2.4x heran, bis er zielbar ist - die alte "Boss stirbt im
-        # Anflug, ohne je anzugreifen"-Falle bleibt geschlossen.
+        # Boss, Drohnen und Vergeltungspulse verwenden alle dieselbe
+        # encounter-basierte Zielbarkeit aus _in_player_range(). Bosse
+        # beginnen ihre eigenen Angriffe erst an ihrer Halteposition.
         # Normalgegner bleiben bei x < 450.
         visible_enemies = [e for e in self.enemies
                            if self._in_player_range(e)]
@@ -1885,11 +2035,42 @@ class PvECombat:
                     d.angle = math.atan2(d.y - prev_y, d.x - prev_x + 1e-6)
 
         for p in list(self.projectiles):
+            p.age += dt
+            if p.kind == "enemy" and p.motion == "homing":
+                dx, dy = cx - p.x, cy - p.y
+                target_ang = math.atan2(dy, dx)
+                current_ang = math.atan2(p.vy, p.vx)
+                delta = (target_ang - current_ang + math.pi) % math.tau - math.pi
+                turn = max(-1.8 * dt, min(1.8 * dt, delta))
+                current_ang += turn
+                p.vx, p.vy = math.cos(current_ang), math.sin(current_ang)
             p.x += p.vx * p.speed * dt
             p.y += p.vy * p.speed * dt
+            if p.motion == "sine":
+                if p.age == dt:
+                    p.origin_y = p.y
+                p.y = p.origin_y + math.sin(p.age * 8.0) * 22.0
+            if (p.kind == "enemy" and p.split_after > 0 and not p.has_split
+                    and p.age >= p.split_after):
+                p.has_split = True
+                base = math.atan2(p.vy, p.vx)
+                for offset in (-.28, .28):
+                    angle = base + offset
+                    self.projectiles.append(Projectile(
+                        x=p.x, y=p.y, vx=math.cos(angle), vy=math.sin(angle),
+                        damage=max(1, int(p.damage * .62)), color=p.color,
+                        size=max(2, p.size - 1), speed=p.speed * 1.08,
+                        kind="enemy", projectile_type="shard", motion="straight"))
+                if p in self.projectiles:
+                    self.projectiles.remove(p)
+                continue
             
             if p.kind == "player":
                 for e in list(self.enemies):
+                    # Enforce the same encounter gate at impact as at target
+                    # selection, including delayed cannon/drone projectiles.
+                    if not self._in_player_range(e):
+                        continue
                     # PAKET 8.8a: Boss-Trefferzone waechst mit der Groesse
                     r_e = BOSS_HIT_R.get(e.enemy_type, 30) if e.is_boss else 30
                     if math.hypot(e.x - p.x, e.y - p.y) < r_e:
@@ -1939,6 +2120,8 @@ class PvECombat:
                                 for o in list(self.enemies):   # NEU PAKET 4: SPRENGSPITZE
                                     if o is e:
                                         continue
+                                    if not self._in_player_range(o):
+                                        continue
                                     if math.hypot(o.x - e.x, o.y - e.y) < 90:
                                         o.hp -= self.cannon_damage * 0.3
                                         o.hurt_t = HURT_T_S   # DRACHEN-HURT
@@ -1957,11 +2140,14 @@ class PvECombat:
                         break
             
             elif p.kind == "enemy":
-                if math.hypot(cx - p.x, cy - p.y) < 80:
+                hit_distance = math.hypot(cx - p.x, cy - p.y)
+                if hit_distance < max(80.0, p.impact_radius):
                     # PUNKT-4-AUFTRAG: Schadensrechnung (ABFANG-FELD dr_pct,
                     # Idle-Schutz, LETZTER WILLE) zentral - Verhalten
                     # identisch zum bisherigen Projektil-Pfad (PAKET 7B).
-                    applied = self._apply_player_damage(p.damage, cx, cy)
+                    falloff = (max(.35, 1.0 - hit_distance / max(1.0, p.impact_radius))
+                               if p.impact_radius > 0 else 1.0)
+                    applied = self._apply_player_damage(p.damage * falloff, cx, cy)
                     self._spawn_damage(p.x, p.y - 15, applied, (255, 77, 100))   # NEU PAKET 4: Schadenszahl (Spieler)
                     # PAKET 8.3: Einschlag fuer die Damage-FX am Schiff buchen
                     self.hit_events.append((float(p.x), float(p.y), float(applied)))

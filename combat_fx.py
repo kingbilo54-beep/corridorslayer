@@ -127,27 +127,56 @@ class CombatFX:
         # ---- 2) Projektile mit Leuchtspur ----
         for p in combat.projectiles:
             col = p.color if isinstance(p.color, tuple) else (255, 255, 255)
+            x, y = T(p.x, p.y)
+            r = max(2, int(p.size * s))
+            ux, uy = p.vx, p.vy
+            tail = (int(x - ux * (p.size * 3.5) * s),
+                    int(y - uy * (p.size * 3.5) * s))
             pts = self._trails.get(id(p))
             if pts and len(pts) >= 2:
-                # Spur von hinten (dunkel) zur aktuellen Position (hell)
-                n = len(pts)
-                for i in range(n - 1):
-                    kk = (i + 1) / n
-                    a = T(*pts[i])
-                    b = T(*pts[i + 1])
-                    pygame.draw.line(surface, _fade(col, 0.25 + 0.55 * kk),
+                for i in range(len(pts) - 1):
+                    k = (i + 1) / len(pts)
+                    a, b = T(*pts[i]), T(*pts[i + 1])
+                    pygame.draw.line(surface, _fade(col, 0.25 + 0.55 * k),
                                      (int(a[0]), int(a[1])),
                                      (int(b[0]), int(b[1])),
                                      max(1, int(p.size * s * 0.55)))
-            x, y = T(p.x, p.y)
-            r = max(1, int(p.size * s))
-            # Glow (additiv) + Kern
-            g = _glow(col, max(4, r * 3))
-            surface.blit(g, g.get_rect(center=(int(x), int(y))),
+            glow = _glow(col, max(4, r * 2))
+            surface.blit(glow, glow.get_rect(center=(int(x), int(y))),
                          special_flags=pygame.BLEND_ADD)
-            pygame.draw.circle(surface, col, (int(x), int(y)), r)
-            pygame.draw.circle(surface, (255, 255, 255),
-                               (int(x), int(y)), max(1, r // 2))
+            if p.projectile_type == "laser":
+                end = (int(x + ux * (28 + p.size * 2) * s),
+                       int(y + uy * (28 + p.size * 2) * s))
+                pygame.draw.line(surface, _fade(col, .48), tail, end, max(3, r * 3))
+                pygame.draw.line(surface, (235, 250, 255), tail, end, max(1, r // 2))
+            elif p.projectile_type in ("rocket", "explosive"):
+                pygame.draw.line(surface, _fade(col, .7), tail, (int(x), int(y)), max(2, r))
+                body = [(int(x + ux * r * 1.8), int(y + uy * r * 1.8)),
+                        (int(x - uy * r * .8), int(y + ux * r * .8)),
+                        (int(x - ux * r * 1.4), int(y - uy * r * 1.4)),
+                        (int(x + uy * r * .8), int(y - ux * r * .8))]
+                pygame.draw.polygon(surface, col, body)
+                if p.impact_radius > 0:
+                    pygame.draw.circle(surface, _fade(col, .35), (int(x), int(y)),
+                                       max(r + 2, int(p.impact_radius * s)), 1)
+            elif p.projectile_type in ("shard", "ice"):
+                tip = (int(x + ux * r * 2.2), int(y + uy * r * 2.2))
+                side1 = (int(x - uy * r), int(y + ux * r))
+                side2 = (int(x + uy * r), int(y - ux * r))
+                pygame.draw.polygon(surface, col, [tip, side1, side2])
+                pygame.draw.line(surface, (235, 250, 255), side1, side2, 1)
+            elif p.projectile_type in ("needle", "phase"):
+                pygame.draw.line(surface, col, tail, (int(x), int(y)), max(2, r))
+                pygame.draw.circle(surface, (245, 250, 255), (int(x), int(y)), max(1, r // 2))
+            elif p.projectile_type == "pulse":
+                pygame.draw.circle(surface, col, (int(x), int(y)), r + 2, max(1, r // 2))
+                pygame.draw.circle(surface, _fade(col, .5), (int(x), int(y)), max(1, r - 1), 1)
+            elif p.projectile_type == "orb":
+                pygame.draw.circle(surface, col, (int(x), int(y)), r + 1, max(1, r // 2))
+                pygame.draw.circle(surface, (245, 245, 255), (int(x), int(y)), max(1, r // 3))
+            else:
+                pygame.draw.circle(surface, col, (int(x), int(y)), r)
+                pygame.draw.circle(surface, (255, 255, 255), (int(x), int(y)), max(1, r // 2))
 
         # ---- 3) Muendungsfeuer der Kanonen ----
         for mf in getattr(combat, "muzzle_flashes", []):
