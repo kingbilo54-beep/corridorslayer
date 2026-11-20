@@ -23,13 +23,14 @@ korrekt rechnet - NICHT nur per Quelltext-Lektuere:
       Fenster): Spielstart senkt die verbrauchte Zeit nicht; Fenster-
       Ablauf (24 h) gibt sie einmalig frei.
 
-NUR Pruefung: schreibt nichts ins echte Spiel (Save-Pfad nach /tmp).
+NUR Pruefung: schreibt ausschliesslich in ein temporaeres Testverzeichnis.
 Aufruf:  python tools/check_economy.py
 """
 import json
 import os
 import sys
 import time
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -39,15 +40,15 @@ sys.path.insert(0, BASE)
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+_check_data_dir = tempfile.TemporaryDirectory(prefix="cs_economy_check_")
+os.environ["CS_DATA_DIR"] = _check_data_dir.name
 
 import rpg_config as rc                                   # noqa: E402
 import pve_system as pve                                  # noqa: E402
 import module_system as mods                              # noqa: E402
 
 # Echten Spielstand NIE beruehren (wie simulate_economy beim Skill-Tree)
-mods.SAVE_PATH = Path("/tmp/cs_check_economy_save.json")
-if mods.SAVE_PATH.exists():
-    mods.SAVE_PATH.unlink()
+mods.SAVE_PATH = Path(_check_data_dir.name) / "save.json"
 
 
 def alt_bericht(nominal, idle_pct, capped_s):

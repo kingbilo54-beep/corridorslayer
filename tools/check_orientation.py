@@ -3,7 +3,7 @@
 ===========================================================
 Rendert ALLE Gegnertypen mit der ECHTEN Spiel-Funktion main.enemy_rotated
 an 3 typischen Schiffspunkten (links auf Hoehe, links oben, links unten)
-und legt die Ergebnisse als Kontaktbogen check_orientation.png ab.
+und legt die Ergebnisse als Kontaktbogen in einem Temp-Verzeichnis ab.
 
 Zusaetzlich werden harte Assertions geprueft:
   * FRONTALE Typen (eye/medusa/crystal) kommen unveraendert zurueck.
@@ -14,13 +14,14 @@ Zusaetzlich werden harte Assertions geprueft:
     diagonale Kunst wie lancer/stalker bleibt abgedeckt).
   * Die Typ-Tabellen decken ALLE Gegner mit Spawn-Datei ab.
 
-NUR Analyse: schreibt ausschliesslich check_orientation.png, aendert
+NUR Analyse: schreibt ausschliesslich einen Temp-Kontaktbogen, aendert
 keine Spielwerte, keine Saves. Idempotent (Auftrag 12).
 Aufruf:  python tools/check_orientation.py
 """
 import math
 import os
 import sys
+import tempfile
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
@@ -28,6 +29,8 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(BASE)
 sys.path.insert(0, BASE)
+_check_tempdir = tempfile.TemporaryDirectory(prefix="cs_orientation_check_")
+os.environ["CS_DATA_DIR"] = _check_tempdir.name
 
 import pygame  # noqa: E402
 
@@ -86,6 +89,10 @@ def main():
              for f in os.listdir(os.path.join(BASE, "enemys"))
              if f.startswith("enemy_") and f.endswith(".png")
              and not f.endswith("_closed.png")}
+    # Der Eisdrache wird absichtlich aus seiner Idle-Frame-Sequenz geladen;
+    # es gibt fuer ihn keine flache enemys/enemy_dragon.png-Datei.
+    if game_mod.load_enemy_anim("dragon", "idle"):
+        files.add("dragon")
     missing = files - set(types)
     extra = set(types) - files
     assert not missing, f"nicht klassifizierte Gegner: {sorted(missing)}"
@@ -143,7 +150,7 @@ def main():
         sheet.blit(font.render(t, True, (255, 230, 120)), (x0 + 6, y0 + 4))
         pygame.draw.rect(sheet, (70, 70, 92),
                          (x0, y0, CELL_W, CELL_H + LBL), 1)
-    out = os.path.join(BASE, "check_orientation.png")
+    out = os.path.join(_check_tempdir.name, "check_orientation.png")
     pygame.image.save(sheet, out)
     print(f"Kontaktbogen: {out}")
 

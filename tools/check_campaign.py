@@ -11,9 +11,8 @@ Prueft mit lauffaehigen Assertions, dass die Kampagnen-Erweiterung
       + Touch-Puffer (bei Referenz-Groesse 1920x1080).
   K3  Boss-Zuordnung: Sektor 1-5 liefern exakt die historische
       BOSS_DATA-Belegung (UNVERAENDERT, byte-gleiche Werte), Sektor
-      6-8 ihre eigene; Nicht-Boss-Stufen -> None; alle Typen sind
-      vorhandene Boss-Typen (interceptor/brute/dragon) mit
-      vorhandenen PNGs.
+      6-8 ihre eigene; Nicht-Boss-Stufen -> None; alle Typen besitzen
+      eingebundene Boss-Idle-Sheets.
   K4  Skalierungskette: CAMPAIGN_*_MULT fuer 1-8 monoton ansteigend
       (HP/DMG/Beute) bzw. absteigend (Spawn-Intervall) und die
       Nicht-1-Sektoren sind in den Dicts vorhanden (kein Fallback-1.0
@@ -27,12 +26,13 @@ Prueft mit lauffaehigen Assertions, dass die Kampagnen-Erweiterung
       unterscheiden sich von 1-5 (eigenstaendige Kombinationen),
       Gegnertypen existieren alle als PNG.
 
-NUR Pruefung: schreibt nichts (Save-Pfad nach /tmp).
+NUR Pruefung: schreibt ausschliesslich in ein temporaeres Testverzeichnis.
 Aufruf:  python tools/check_campaign.py
 """
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -41,15 +41,15 @@ sys.path.insert(0, BASE)
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+_check_data_dir = tempfile.TemporaryDirectory(prefix="cs_campaign_check_")
+os.environ["CS_DATA_DIR"] = _check_data_dir.name
 
 import rpg_config as rc                                   # noqa: E402
 import pve_system as pve                                  # noqa: E402
 import world_map                                          # noqa: E402
 import module_system as mods                              # noqa: E402
 
-mods.SAVE_PATH = Path("/tmp/cs_check_campaign_save.json")
-if mods.SAVE_PATH.exists():
-    mods.SAVE_PATH.unlink()
+mods.SAVE_PATH = Path(_check_data_dir.name) / "save.json"
 
 BOSS_TYPS = set(pve.BOSS_TYPE_CFG.keys())
 
@@ -109,14 +109,25 @@ def main():
             cfg = pve.boss_cfg_for(sec, st)
             assert cfg is pve.BOSS_SECTOR_DATA[sec][st]
             assert cfg["type"] in BOSS_TYPS, f"Unbekannter Boss-Typ {cfg['type']}"
-            png = os.path.join("enemys", f"enemy_{cfg['type']}.png")
+            visual_type = cfg.get("phase_type", cfg["type"])
+            try:
+                import main as game_main
+            except ImportError:
+                from . import main as game_main
+            folder, filename = game_main.BOSS_IDLE_SHEETS[visual_type]
+            png = os.path.join("enemys", folder, filename)
             assert os.path.exists(png), f"Boss-Grafik fehlt: {png}"
         assert pve.boss_cfg_for(sec, 1) is None, "Stufe 1 ist kein Boss"
         assert pve.boss_stats_for_stage(1, sec) is None
-    names6_8 = {(6, 15): "ABYSSDRACHE", (7, 15): "SPLITTERKÖNIG",
-                (8, 15): "KERNHERRSCHER"}
-    for (sec, st), name in names6_8.items():
-        assert pve.boss_cfg_for(sec, st)["name"] == name
+    expected_bosses = {
+        (6, 5): "astral_centaur", (6, 10): "colossal_armadillo",
+        (6, 15): "corrupted_gryphon", (7, 5): "dreadmaw_behemoth",
+        (7, 10): "obsidian_mantis", (7, 15): "primordial_serpent",
+        (8, 5): "shadow_weave", (8, 10): "spire_walker",
+        (8, 15): "void_lurker",
+    }
+    for key, kind in expected_bosses.items():
+        assert pve.boss_cfg_for(*key)["type"] == kind
     print("  K3 OK   Sektor 1-5 historische Bosse byte-gleich, 6-8 eigene "
           "Belegung (vorhandene Typen + PNGs)")
 
@@ -135,7 +146,13 @@ def main():
 
     # --- K5: Sperrlogik + Save-Fortschritt ueber die alte Grenze ------------
     fm = mods.FortressModules()
-    assert fm.highest_campaign == 1
+    # Ein isolierter Testsave startet unabhängig von einer vorhandenen
+    # Legacy-Spielstanddatei im Repository.
+    fm.credits = 0
+    fm.highest_campaign = 1
+    fm.highest_stage = 1
+    fm.completed_stages = []
+    fm.completed_campaigns = []
     # Kumulativer Fortschritt: Sektoren 1-5 komplett durchspielen
     # (complete_stage schaltet erst frei, wenn der VORHERIGE Sektor fertig ist)
     for c in range(1, 5):
