@@ -99,6 +99,20 @@ PROFILES_SECTORS = {
                                  "reaktor": 8, "hangar": 8, "radar": 7, "reparatur": 7}, 7, 26),
     8: ("Schiff 12 - Endstufe", {"kanonen": 15, "antrieb": 10, "huelle": 9, "schild": 8,
                                  "reaktor": 8, "hangar": 8, "radar": 7, "reparatur": 7}, 7, 30),
+    9: ("Schiff 12 - Endstufe", {"kanonen": 15, "antrieb": 10, "huelle": 9, "schild": 8,
+                                 "reaktor": 8, "hangar": 8, "radar": 7, "reparatur": 7}, 8, 32),
+    10: ("Schiff 12 - Endstufe", {"kanonen": 15, "antrieb": 10, "huelle": 9, "schild": 8,
+                                  "reaktor": 8, "hangar": 8, "radar": 7, "reparatur": 7}, 8, 34),
+    11: ("Schiff 12 - Endstufe", {"kanonen": 15, "antrieb": 10, "huelle": 9, "schild": 8,
+                                  "reaktor": 8, "hangar": 8, "radar": 7, "reparatur": 7}, 8, 36),
+    12: ("Schiff 12 - Endstufe", {"kanonen": 15, "antrieb": 10, "huelle": 9, "schild": 8,
+                                  "reaktor": 8, "hangar": 8, "radar": 7, "reparatur": 7}, 8, 38),
+    13: ("Schiff 12 - Endstufe", {"kanonen": 15, "antrieb": 10, "huelle": 9, "schild": 8,
+                                  "reaktor": 8, "hangar": 8, "radar": 7, "reparatur": 7}, 8, 40),
+    14: ("Schiff 12 - Endstufe", {"kanonen": 15, "antrieb": 10, "huelle": 9, "schild": 8,
+                                  "reaktor": 8, "hangar": 8, "radar": 7, "reparatur": 7}, 8, 42),
+    15: ("Schiff 12 - Endstufe", {"kanonen": 15, "antrieb": 10, "huelle": 9, "schild": 8,
+                                  "reaktor": 8, "hangar": 8, "radar": 7, "reparatur": 7}, 8, 44),
 }
 
 SHIP_DODGE_AMP = 70.0     # px vertikale Auslenkung (Touch-Drag)

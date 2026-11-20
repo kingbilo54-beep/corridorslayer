@@ -90,33 +90,41 @@ SKILL_PRICE_STRONG_MULT = 1.40
 # (die Bosswerte von Stufe 10/15 wurden in pve_system.BOSS_DATA direkt
 # auf dieses Niveau nachjustiert). Die Werte hier heben die SEKTOREN 2-5
 # darueber an. Simulierbar ueber tools/simulate_campaign.py.
-# AUFTRAG 19 (PUNKT 2): Die Ketten sind auf SEKTOREN 6-8 fortgesetzt
+# AUFTRAG 19 / REDESIGN: Die Ketten laufen auf SEKTOREN 6-15 weiter.
 # (gleiche je-Sektor-Schritte wie 1->5: HP ~x1.30, DMG ~x1.15, Beute
 # ~x1.13, Spawn-Takt ~-6 %). Die Spieler-Ausruestung ist dagegen
 # gedeckelt (Module max L15, Schiff max L12) - die neuen Sektoren sind
 # bewusst das Ende der Progressionsleiter, erreichbar erst mit
 # weitgehend ausgebautem Schiff (siehe Profile in simulate_campaign).
 CAMPAIGN_HP_MULT     = {1: 1.0, 2: 1.30, 3: 1.70, 4: 2.20, 5: 2.85,
-                        6: 3.70, 7: 4.80, 8: 6.25}
+                        6: 3.70, 7: 4.80, 8: 6.25,
+                        9: 6.70, 10: 7.20, 11: 7.75, 12: 8.30,
+                        13: 8.85, 14: 9.40, 15: 10.00}
 CAMPAIGN_DMG_MULT    = {1: 1.0, 2: 1.15, 3: 1.32, 4: 1.52, 5: 1.75,
-                        6: 2.01, 7: 2.32, 8: 2.67}
+                        6: 2.01, 7: 2.32, 8: 2.67,
+                        9: 2.85, 10: 3.05, 11: 3.28, 12: 3.50,
+                        13: 3.72, 14: 3.95, 15: 4.20}
 CAMPAIGN_REWARD_MULT = {1: 1.0, 2: 1.12, 3: 1.26, 4: 1.42, 5: 1.60,
-                        6: 2.60, 7: 3.30, 8: 4.20}
+                        6: 2.60, 7: 3.30, 8: 4.20,
+                        9: 4.65, 10: 5.05, 11: 5.45, 12: 5.85,
+                        13: 6.25, 14: 6.65, 15: 7.05}
 # AUFTRAG 22: Sektor 6-8-Beute an die Upgrade-Kosten abgestimmt. Vorher
 # wuchs die Beute (x1.80/2.03/2.30) weit langsamer als die exponentielle
 # Kostenkurve (x1.6 je Modulstufe, BAL_COST_MULT 5.6) - Farm-Minuten je
 # Modul-Endstufe explodierten von ~20 (S1) auf ~220 (S8-L15). Mit der
 # neuen Kette sinkt sie auf 196/155/122 min je Modul-L15 (progressiv
 # BELohnend fuer Fortschritt) - die Ratio zur Sektor-Gefahr (HP x3.70-
-# 6.25) bleibt sinnvoll. Sektor 1-5 unveraendert (Erst-Durchlauf-Balance).
+# 6.25) bleibt sinnvoll. Sektor 1-8 unveraendert (bestehende Balance).
 # Spawn-Intervall-Faktor (multipliziert die Pause zwischen zwei Spawns;
 # kleiner = Gegner kommen schneller nach). Kampagne 1 unveraendert.
 CAMPAIGN_SPAWN_SPD   = {1: 1.0, 2: 0.93, 3: 0.87, 4: 0.80, 5: 0.75,
-                        6: 0.71, 7: 0.67, 8: 0.63}
+                        6: 0.71, 7: 0.67, 8: 0.63,
+                        9: 0.60, 10: 0.58, 11: 0.56, 12: 0.54,
+                        13: 0.52, 14: 0.50, 15: 0.48}
 # AUFTRAG 19: EINE Zahl fuer "wie viele Sektoren hat die Kampagne"
-# (Karte, Sperrlogik, Endspiel-Erkennung, Simulatoren). Sektor 1-5 sind
-# der historische Bestand, 6-8 die Erweiterung.
-CAMPAIGN_COUNT = 8
+# (Karte, Sperrlogik, Endspiel-Erkennung, Simulatoren). Bestehende Saves
+# behalten ihre fortlaufenden IDs; die Erweiterung hängt nach Sektor 8 an.
+CAMPAIGN_COUNT = 15
 
 # ----------------------------------------------------------------------
 # SPIELERLEVEL / XP-KURVE (zentral konfigurierbar)

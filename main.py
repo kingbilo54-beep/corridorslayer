@@ -1873,6 +1873,21 @@ DRONEN_FOLDER = _folder("drohnen", r"C:\Users\bsahi\Desktop\corridorSlayers\DS4\
 
 _part_files_cache = {}
 _part_img_cache = {}
+_werft_scaled_cache = {}
+_werft_hull_cache = {}
+
+
+def _werft_scaled(img, asset_key, size):
+    """Gecachte Modul-Skalierung fuer die Werft, begrenzt auf 96 Varianten."""
+    size = (max(2, int(size[0])), max(2, int(size[1])))
+    key = (asset_key, size)
+    scaled = _werft_scaled_cache.get(key)
+    if scaled is None:
+        if len(_werft_scaled_cache) >= 96:
+            _werft_scaled_cache.clear()
+        scaled = pygame.transform.smoothscale(img, size)
+        _werft_scaled_cache[key] = scaled
+    return scaled
 
 
 def _nat_filename_key(fname):
@@ -1923,6 +1938,31 @@ def _load_part_crop(folder, fname):
     return img
 
 
+def load_werft_hull_image(level, folder):
+    """Liefert den transparenten Rumpf in Originalauflösung für die Werft.
+
+    fortress_2d skaliert das Kampfbild bewusst auf 160 px Breite. Die Werft
+    braucht dagegen die vorhandene PNG-Auflösung, damit das große Schiff
+    nicht sichtbar hochskaliert und weichgezeichnet wird.
+    """
+    lvl = max(1, int(level))
+    while lvl > 1 and not os.path.isfile(os.path.join(folder, f"ship_lvl_{lvl}.png")):
+        lvl -= 1
+    key = ("werft_hull", os.path.abspath(folder), lvl)
+    if key in _werft_hull_cache:
+        return _werft_hull_cache[key]
+    img = None
+    try:
+        raw = pygame.image.load(os.path.join(folder, f"ship_lvl_{lvl}.png")).convert_alpha()
+        bounds = raw.get_bounding_rect()
+        img = pygame.Surface((max(1, bounds.w), max(1, bounds.h)), pygame.SRCALPHA)
+        img.blit(raw, (0, 0), bounds)
+    except Exception as exc:
+        _log.warning("Werftrumpf nicht ladbar: Stufe %s (%s)", lvl, exc)
+    _werft_hull_cache[key] = img
+    return img
+
+
 def _generic_part_image(folder, level):
     """Level -> generisches Modul-PNG (antrieb/hangar/drohnen).
     Die natuerlich sortierten Dateien bilden die Level 1..N ab;
@@ -1955,6 +1995,7 @@ FORTRESS_NORM_W = 160   # = Fortress.target_width (fortress_2d.py, Instanz-Attri
 ENGINE_SHIP_SCALE = 1.0
 _engine_sprite_meta = None
 _engine_sprite_cache = {}
+_engine_render_cache = {}
 
 
 def _load_engine_sprite_data(level):
@@ -2026,7 +2067,8 @@ def _load_engine_sprite_data(level):
         return None
 
 
-def draw_engine_sprites(surface, level, hull_edge_pos, scale=1.0, angle=0.0):
+def draw_engine_sprites(surface, level, hull_edge_pos, scale=1.0, angle=0.0,
+                        flame_scale=1.0, glow_scale=1.0):
     """Zeichnet einen vergroesserten Antrieb mit separat skaliertem Glow/Plasma."""
     data = _load_engine_sprite_data(level)
     if data is None:
@@ -2045,8 +2087,8 @@ def draw_engine_sprites(surface, level, hull_edge_pos, scale=1.0, angle=0.0):
     # Body, Flamme und Glow verwenden dieselbe Zellgroesse und denselben
     # Anker, damit der komplette Antrieb zur Schiffsbreite passt.
     layers = (
-        (data["glow_frames"][frame_index], base_scale),
-        (data["frames"][frame_index], base_scale),
+        (data["glow_frames"][frame_index], base_scale * max(.1, float(glow_scale))),
+        (data["frames"][frame_index], base_scale * max(.1, float(flame_scale))),
         (data["body"], base_scale),
     )
     rad = math.radians(engine_angle)
@@ -2057,11 +2099,17 @@ def draw_engine_sprites(surface, level, hull_edge_pos, scale=1.0, angle=0.0):
             max(1, int(round(cell_w * layer_scale))),
             max(1, int(round(cell_h * layer_scale))),
         )
-        image = layer
-        if image.get_size() != size:
-            image = pygame.transform.smoothscale(image, size)
-        if abs(engine_angle) > 0.001:
-            image = pygame.transform.rotate(image, engine_angle)
+        render_key = (id(layer), size, round(engine_angle, 2))
+        image = _engine_render_cache.get(render_key)
+        if image is None:
+            image = layer
+            if image.get_size() != size:
+                image = pygame.transform.smoothscale(image, size)
+            if abs(engine_angle) > 0.001:
+                image = pygame.transform.rotate(image, engine_angle)
+            if len(_engine_render_cache) >= 128:
+                _engine_render_cache.clear()
+            _engine_render_cache[render_key] = image
 
         # Ankerposition fuer jede Ebene separat berechnen. So vergroessern
         # sich Flamme und Glow um denselben Austrittspunkt statt wegzurutschen.
@@ -2625,6 +2673,10 @@ class Game:
 
         # Eingabe-Zustand (Touch & Maus, Feuer beim Loslassen)
         self._ptr = None
+        self._hover_pos = None
+        self._stage_terminal_cache = {}
+        self._stage_card_fill_cache = {}
+        self._campaign_font_cache = {}
         self._touch_guard = 0.0
 
         self._load_prefs()
@@ -3152,6 +3204,7 @@ class Game:
                 self.is_dragging_engine = False
 
             elif event.type == pygame.MOUSEMOTION:
+                self._hover_pos = ui_kit.map_pos(event.pos)
                 self._debug_drag_move(ui_kit.map_pos(event.pos))
 
             elif event.type == pygame.KEYDOWN:
@@ -3474,7 +3527,7 @@ class Game:
                 if result["won"] and self.state == self.PLAYING:
                     # AUFTRAG 6: Endspiel-Erkennung VOR complete_stage -
                     # AUFTRAG 19: die letzte Kampagne ist Sektor
-                    # rpg_config.CAMPAIGN_COUNT (jetzt 8), Stufe 15 deren
+                    # rpg_config.CAMPAIGN_COUNT, Stufe 15 deren
                     # Finale. Dann: VICTORY-Screen + NG+.
                     final_win = (self.selected_sector
                                  == rpg_config.CAMPAIGN_COUNT
@@ -3897,8 +3950,7 @@ class Game:
           2. Klick  : SEKTOR -> STUFENANSICHT: das bekannte Stufen-Sheet
                       oeffnet UEBER der Karte; Auswahl + Anhebung
                       bleiben sichtbar. Gesperrte Sektoren melden die
-                      Sperre. SIGNALE -> Detail-Szene (Zoom) wie
-                      bisher (PAKET-7F-Szene).
+                      Sperre. Kampagnenziele oeffnen die Stufenauswahl.
         Panel-Aktionen (KAMPF STARTEN / STUFEN) wirken weiter auf die
         Selektion - der Direkteinstieg ueber die Buttons bleibt."""
         if oid != self.map_sel:
@@ -4324,7 +4376,8 @@ class Game:
         ui["snd_res"] = Btn("snd_res", pygame.Rect(W - m - isz, m, isz, isz),
                             icon=("sound_off" if SFX.muted else "sound_on"), accent=MUTED)
         top = m + isz + u(16)
-        stage = pygame.Rect(m, top, int(W * 0.54) - m, H - top - m)
+        stage_share = 0.62 if W > H else 0.54
+        stage = pygame.Rect(m, top, int(W * stage_share) - m, H - top - m)
         self._werft_stage = stage
         panel = pygame.Rect(stage.right + u(12), top,
                             max(u(240), W - m - stage.right - u(12)), H - top - m)
@@ -4418,14 +4471,17 @@ class Game:
 
     def _werft_ship_rect(self, stage):
         """Box des Schiffsbildes in der Buehne (gecacht pro Groesse)."""
-        base = getattr(self.fortress, "_base_image", None)
+        base = load_werft_hull_image(self.modules.ship_hull_level,
+                                     self.fortress.image_folder)
+        if base is None:
+            base = getattr(self.fortress, "_base_image", None)
         iw, ih = base.get_size() if base is not None else (160, 80)
         key = ("werftrect", stage.w, stage.h, iw, ih)
         r = self._fit_cache.get(key)
         if r is None:
-            tw = int(stage.w * 0.84)
+            tw = int(stage.w * 0.92)
             th = int(ih * tw / iw)
-            maxh = int(stage.h * 0.70)
+            maxh = int(stage.h * 0.73)
             if th > maxh:
                 th = maxh
                 tw = int(iw * th / ih)
@@ -4472,20 +4528,22 @@ class Game:
         if self.selected_sector > 0:
             landscape = W > H
             if landscape:
-                sw, sh = min(W - u(20), u(880)), int(H * 0.78)
-                rect = pygame.Rect((W - sw) // 2, int(H * 0.14), sw, sh)
+                sw = min(W - u(24), u(980))
+                sh = min(int(H * 0.84), u(520))
+                rect = pygame.Rect((W - sw) // 2, (H - sh) // 2, sw, sh)
                 cols, rows = 5, 3
             else:
-                rect = pygame.Rect(u(8), int(H * 0.16), W - u(16), int(H * 0.78))
+                rect = pygame.Rect(u(8), int(H * 0.12), W - u(16), int(H * 0.84))
                 cols, rows = 3, 5
-            head = u(46)
+            head = u(58)
+            footer = u(34)
             ui["stg_close"] = Btn("stg_close",
                                   pygame.Rect(rect.right - u(40) - u(10), rect.y + u(8),
                                               u(40), u(40)),
                                   icon="close", accent=RED)
             gap = u(8)
             cw = (rect.w - u(24) - gap * (cols - 1)) // cols
-            ch = (rect.h - head - u(14) - gap * (rows - 1)) // rows
+            ch = (rect.h - head - footer - u(14) - gap * (rows - 1)) // rows
             for i in range(15):
                 stage = i + 1
                 rr = pygame.Rect(rect.x + u(12) + (i % cols) * (cw + gap),
@@ -4501,11 +4559,13 @@ class Game:
                 ui[rid] = Btn(rid, rr, accent=CYAN)
             if not self.map_scene.active:
                 tw, th = min(u(250), W - u(110)), compact_btn_h()
+                label, sub = (("FORTRESS", "SCHIFFSKAMPAGNE")
+                              if self.campaign_track == "planet"
+                              else ("STERNENKARTE", "PLANETENKAMPAGNE"))
                 ui["map_track"] = Btn(
                     "map_track",
                     pygame.Rect((W - tw) // 2, margin(), tw, th),
-                    "PLANETEN" if self.campaign_track == "planet"
-                    else "FORTRESS · SCHIFF", "KAMPAGNENPFAD",
+                    label, sub,
                     CYAN if self.campaign_track == "planet" else VIOLET)
         return ui
 
@@ -4658,6 +4718,15 @@ class Game:
 
     def _pressed(self, bid):
         return bool(self._ptr and self._ptr["id"] == bid)
+
+    def _campaign_font(self, family, pt, bold=True):
+        px = ui_kit.fs(pt)
+        key = (family, px, bold)
+        font = self._campaign_font_cache.get(key)
+        if font is None:
+            font = pygame.font.SysFont(family, px, bold=bold)
+            self._campaign_font_cache[key] = font
+        return font
 
     # ---------------- Zeichnen ----------------
     def _draw_menu_backdrop(self):
@@ -4827,21 +4896,24 @@ class Game:
         erscheint die passende Grafik sofort, ohne Neustart.
         """
         lay = self._werft_layout()
-        base = getattr(self.fortress, "_base_image", None)
+        base = load_werft_hull_image(self.modules.ship_hull_level,
+                                     self.fortress.image_folder)
+        if base is None:
+            base = getattr(self.fortress, "_base_image", None)
 
         def P(uv):
             return (ship_draw.x + int(uv[0] * ship_draw.w),
                     ship_draw.y + int(uv[1] * ship_draw.h))
 
-        def scale_w(img, target_w):
+        def scale_w(img, target_w, asset_key=None):
             tw = max(2, int(target_w))
             th = max(2, int(tw * img.get_height() / img.get_width()))
-            return pygame.transform.smoothscale(img, (tw, th))
+            return _werft_scaled(img, ("werft", asset_key or id(img), "w"), (tw, th))
 
-        def scale_h(img, target_h):
+        def scale_h(img, target_h, asset_key=None):
             th = max(2, int(target_h))
             tw = max(2, int(th * img.get_width() / img.get_height()))
-            return pygame.transform.smoothscale(img, (tw, th))
+            return _werft_scaled(img, ("werft", asset_key or id(img), "h"), (tw, th))
 
         def contact_shadow(cx, cy, w, h):
             """Weicher Boden-Schatten, damit aufgesetzte Teile 'aufliegen'."""
@@ -4849,6 +4921,32 @@ class Game:
             sh = pygame.Surface((w, h), pygame.SRCALPHA)
             pygame.draw.ellipse(sh, (0, 0, 0, 78), (0, 0, w, h))
             SCREEN.blit(sh, (int(cx - w / 2), int(cy - h / 2)))
+
+        # Recessed service deck under the hull: two short industrial rails
+        # and a dim center strip anchor the ship in the hangar stage.
+        deck_y = min(self._werft_stage.bottom - u(48), ship_draw.bottom - u(9))
+        deck_w = int(ship_draw.w * .94)
+        deck = pygame.Surface((deck_w, u(42)), pygame.SRCALPHA)
+        deck_pts = [(u(10), u(17)), (deck_w - u(10), u(17)),
+                    (deck_w - u(54), u(39)), (u(54), u(39))]
+        pygame.draw.polygon(deck, (5, 20, 34, 155), deck_pts)
+        pygame.draw.line(deck, (40, 194, 219, 115), deck_pts[0], deck_pts[1], 2)
+        pygame.draw.line(deck, (101, 67, 190, 90), deck_pts[3], deck_pts[2], 1)
+        SCREEN.blit(deck, (ship_draw.centerx - deck_w // 2, deck_y))
+
+        # Installed shield level changes the size and pattern of the actual
+        # protective field asset; it sits behind the silhouette, like a bay
+        # containment envelope, rather than as a menu icon.
+        shield_level = self.modules.get("schild").level
+        if shield_level > 1:
+            shield_img = shield_gfx.image_for(shield_level)
+            if shield_img is not None:
+                diameter = max(u(2), int(max(ship_draw.w, ship_draw.h) * .92))
+                shield = _werft_scaled(shield_img,
+                                       ("shield-field", shield_level),
+                                       (diameter, diameter))
+                shield.set_alpha(14 + min(16, shield_level))
+                SCREEN.blit(shield, shield.get_rect(center=ship_draw.center))
 
         # --- 1) ANTRIEB: Glow + Flamme + Gehaeuse HINTER dem Rumpf ---
         # Drei Ebenen teilen denselben metadata-definierten Heckanker
@@ -4866,13 +4964,16 @@ class Game:
             base_scale = float(engine_data["info"].get("scale", 0.2635))
             engine_scale = max(0.02, min(2.0,
                 base_scale * ENGINE_SHIP_SCALE * ship_draw.w / FORTRESS_NORM_W
-            ))
+            )) * 0.46
             engine_angle = float(lay.get(
                 "engine_angle", WERFT_LAYOUT_DEFAULT["engine_angle"]
             ))
             draw_engine_sprites(
                 SCREEN, engine_level, (ex, ey),
-                scale=engine_scale, angle=engine_angle
+                scale=engine_scale, angle=engine_angle,
+                # The atlas contains long exhaust trails. Keep them inside
+                # the hangar stage while retaining the equipped engine body.
+                flame_scale=.30, glow_scale=.38
             )
         else:
             # Sicherheitsnetz: Neue Sprites nicht ladbar (Ordner fehlt,
@@ -4902,6 +5003,47 @@ class Game:
             self.fortress.draw(SCREEN)
             self.fortress.x, self.fortress.y = ox, oy
 
+        # HULL ARMOR: no separate armor sprite exists in the repository.
+        # Thin, level-counted plates sit on the existing fortress artwork.
+        armor_level = self.modules.get("huelle").level
+        plate_centers = ((.34, .29), (.47, .43), (.60, .57), (.72, .68))
+        plate_count = min(len(plate_centers), 1 + (armor_level - 1) // 4)
+        armor_layer = pygame.Surface(ship_draw.size, pygame.SRCALPHA)
+        for px, py in plate_centers[:plate_count]:
+            cx, cy = P((px, py))
+            cx -= ship_draw.x
+            cy -= ship_draw.y
+            pw, ph = max(5, int(ship_draw.w * .050)), max(3, int(ship_draw.h * .024))
+            col = (118, 190, 218, min(110, 46 + armor_level * 4))
+            plate = [(cx - pw, cy), (cx - pw // 2, cy - ph),
+                     (cx + pw, cy - ph // 2), (cx + pw // 2, cy + ph)]
+            pygame.draw.polygon(armor_layer, col, plate)
+            pygame.draw.line(armor_layer, (205, 233, 247, 135), plate[0], plate[1], 1)
+        SCREEN.blit(armor_layer, ship_draw.topleft)
+
+        # REACTOR: the module has no exterior PNG. A small energized core
+        # uses the installed level for its pulse and light intensity.
+        reactor_level = self.modules.get("reaktor").level
+        core_x, core_y = P((.435, .435))
+        core_glow = radial_glow((52, 190, 245), u(34 + min(14, reactor_level)))
+        core_glow.set_alpha(38 + min(35, reactor_level * 3))
+        SCREEN.blit(core_glow, core_glow.get_rect(center=(core_x, core_y)),
+                    special_flags=pygame.BLEND_ADD)
+        core = [(core_x, core_y - u(5)), (core_x + u(6), core_y),
+                (core_x, core_y + u(5)), (core_x - u(6), core_y)]
+        pygame.draw.polygon(SCREEN, (80, 235, 255), core)
+
+        # REPAIR SYSTEM: no repair-bay PNG is supplied, so its real module
+        # level appears as animated maintenance emitters along the ventral hull.
+        repair_level = self.modules.get("reparatur").level
+        repair_pulse = pulse(pygame.time.get_ticks() * .001, 1.9)
+        for i, uv in enumerate(((.39, .63), (.47, .61), (.55, .59))):
+            lx, ly = P(uv)
+            active = (repair_level + i) % 3 != 0 or repair_pulse > .72
+            pygame.draw.rect(SCREEN,
+                             (66, 255, 172) if active else (25, 92, 78),
+                             pygame.Rect(lx - u(3), ly - u(2), u(6), u(4)))
+
         # --- 3) HANGAR: in der vorhandenen Aussparung, vom Rumpf gerahmt ---
         hang = load_hangar_image(self.modules.get("hangar").level)
         if hang is not None:
@@ -4911,8 +5053,8 @@ class Game:
             if hh > max_hh:
                 hh = max_hh
                 hw = hh * hang.get_width() / hang.get_height()
-            hang_s = pygame.transform.smoothscale(
-                hang, (max(2, int(hw)), max(2, int(hh))))
+            hang_s = _werft_scaled(hang, ("hangar", self.modules.get("hangar").level),
+                                   (max(2, int(hw)), max(2, int(hh))))
             hx, hy = P(lay.get("hangar", (0.545, 0.465)))
             SCREEN.blit(hang_s, hang_s.get_rect(center=(hx, hy)))
 
@@ -4933,13 +5075,15 @@ class Game:
                 dx_uv, dy_uv = slots[i % len(slots)]
                 dx = hx + int(dx_uv * hang_s.get_width())
                 dy = hy + int(dy_uv * hang_s.get_height())
-                drone_s = scale_w(drone_img, dw)
+                drone_s = scale_w(drone_img, dw,
+                                  ("drone", self.modules.get("hangar").level))
                 SCREEN.blit(drone_s, drone_s.get_rect(center=(dx, dy)))
 
         # --- 5) RADAR: deutlich verkleinerte Antenne auf dem Heckaufbau ---
         rad = load_radar_image(self.modules.get("radar").level)
         if rad is not None:
-            rad_s = scale_h(rad, lay.get("radar_h", 0.18) * ship_draw.h)
+            rad_s = scale_h(rad, lay.get("radar_h", 0.18) * ship_draw.h,
+                            ("radar", self.modules.get("radar").level))
             rx, ry = P(lay.get("radar", (0.235, 0.135)))
             contact_shadow(rx, ry,
                            int(rad_s.get_width() * 0.85),
@@ -4950,7 +5094,8 @@ class Game:
         # --- 6) KANONE: vorhandene Waffenposition, Levelbild wie im Gefecht ---
         turret = load_kanonen_crop(self.modules.get("kanonen").level)
         if turret is not None:
-            tur_s = scale_w(turret, lay.get("cannon_w", 0.156) * ship_draw.w)
+            tur_s = scale_w(turret, lay.get("cannon_w", 0.156) * ship_draw.w,
+                            ("cannon", self.modules.get("kanonen").level))
             cx, cy = P(self._werft_cannon_uv())
             contact_shadow(cx, cy + int(tur_s.get_height() * 0.30),
                            int(tur_s.get_width() * 0.62),
@@ -5081,11 +5226,7 @@ class Game:
         self.upgrade_fx.draw(SCREEN)
 
     def draw_stages(self):
-        """PAKET 7A/7F: bg_world.jpg als interaktive Karte (world_map.py).
-        NUTZER-FLOW: 1. Klick hebt das Gebiet hervor (Karte bleibt voll
-        sichtbar), 2. Klick oeffnet die STUFENANSICHT (Stufen-Sheet
-        ueber der Karte); Signale oeffnen weiter die Zoom-Szene
-        (map_locations.py)."""
+        """Draw the star chart and its retro arcade mission terminal."""
         W, H = ui_kit.W, ui_kit.H
         states = self._map_states()
         if self.map_scene.active:
@@ -5094,6 +5235,9 @@ class Game:
                                 self._map_panel_info())
         else:
             info = self._map_panel_info()
+            hover_id = (self.gmap.hit(self._hover_pos)
+                        if self._hover_pos and self.selected_sector <= 0 else None)
+            self.gmap.set_hover(hover_id)
             self.gmap.draw(SCREEN, self.world_bg, self.elapsed, states, info)
         if self.debug_mode and not self.map_scene.in_scene:
             self.gmap.draw_debug(SCREEN)
@@ -5104,57 +5248,131 @@ class Game:
             draw_compact_btn(SCREEN, self._ui["map_track"],
                              pressed=self._pressed("map_track"))
         if self.selected_sector > 0:
-            overlay(SCREEN, 110)
+            overlay(SCREEN, 104)
             rect = self._stage_sheet_rect
-            glass_panel(SCREEN, rect, accent=VIOLET, radius=u(12), alpha=226, width=2)
-            name = SECTOR_DATA[self.selected_sector]["name"]
-            neon_text(SCREEN, f"SEKTOR {self.selected_sector} · {name}", F(13), VIOLET,
-                      (rect.centerx, rect.y + u(8)), "midtop", 1)
+            terminal = self._stage_terminal_cache.get(rect.size)
+            if terminal is None:
+                terminal = pygame.Surface(rect.size, pygame.SRCALPHA)
+                terminal.fill((4, 9, 22, 232))
+                for y in range(2, rect.h, u(5)):
+                    pygame.draw.line(terminal, (47, 126, 159, 15),
+                                     (0, y), (rect.w, y), 1)
+                for x in range(u(24), rect.w, u(48)):
+                    pygame.draw.line(terminal, (44, 101, 140, 10),
+                                     (x, 0), (x, rect.h), 1)
+                self._stage_terminal_cache[rect.size] = terminal
+            SCREEN.blit(terminal, rect.topleft)
+            pygame.draw.rect(SCREEN, (23, 190, 220), rect, 1, border_radius=u(4))
+            # Stepped corner brackets distinguish the console from a generic card.
+            corner = u(18)
+            for sx, sy in ((1, 1), (-1, 1), (1, -1), (-1, -1)):
+                x = rect.left if sx > 0 else rect.right
+                y = rect.top if sy > 0 else rect.bottom
+                pygame.draw.line(SCREEN, CYAN, (x, y), (x + sx * corner, y), u(2))
+                pygame.draw.line(SCREEN, CYAN, (x, y), (x, y + sy * corner), u(2))
+            profile = campaign_system.planet_profile(self.selected_sector) or {}
+            planet_name = profile.get("name", SECTOR_DATA[self.selected_sector]["name"])
+            neon_text(SCREEN, "MISSION CONTROL  //  CAMPAIGN DECK",
+                      self._campaign_font("consolas", 9), CYAN,
+                      (rect.x + u(18), rect.y + u(8)), "topleft", 1)
+            text(SCREEN, planet_name, self._campaign_font("bahnschrift", 14), WHITE,
+                 (rect.x + u(18), rect.y + u(24)), "topleft")
+            unlocked_count = (15 if self.selected_sector < self.modules.highest_campaign
+                              else min(15, self.modules.highest_stage)
+                              if self.selected_sector == self.modules.highest_campaign else 0)
+            text(SCREEN, f"OPS {unlocked_count:02d}/15  ·  ELITE 05/10  ·  COMMAND 15",
+                 self._campaign_font("consolas", 8), MUTED,
+                 (rect.right - u(58), rect.y + u(18)), "midright")
             for bid, b in self._ui.items():
                 if bid.startswith("stage_"):
-                    self._draw_stage_cell(b.rect, int(bid[6:]), pressed=self._pressed(bid))
+                    hovered = bool(self._hover_pos and b.rect.collidepoint(self._hover_pos))
+                    self._draw_stage_cell(b.rect, int(bid[6:]),
+                                          pressed=self._pressed(bid), hovered=hovered)
+            footer_y = rect.bottom - u(24)
+            pygame.draw.line(SCREEN, (31, 83, 110), (rect.x + u(14), footer_y - u(6)),
+                             (rect.right - u(14), footer_y - u(6)), 1)
+            technical = self._campaign_font("consolas", 8)
+            text(SCREEN, "NORMAL", technical, CYAN, (rect.x + u(18), footer_y), "midleft")
+            text(SCREEN, "ELITE", technical, VIOLET, (rect.x + u(98), footer_y), "midleft")
+            text(SCREEN, "BOSS", technical, AMBER, (rect.x + u(158), footer_y), "midleft")
+            text(SCREEN, "SELECT AN OPERATION TO DEPLOY",
+                 technical, MUTED, (rect.right - u(18), footer_y), "midright")
             draw_compact_icon_btn(SCREEN, self._ui["stg_close"],
                                   pressed=self._pressed("stg_close"))
 
-    def _draw_stage_cell(self, rect, stage, pressed=False):
+    def _draw_stage_cell(self, rect, stage, pressed=False, hovered=False):
         sector = self.selected_sector
         is_completed = (sector, stage) in self.modules.completed_stages
         is_unlocked = (sector < self.modules.highest_campaign or
                        (sector == self.modules.highest_campaign and stage <= self.modules.highest_stage))
         is_boss = stage == 15
         is_semi = stage in (5, 10)
-        if is_completed:
-            border, fill, inner = GREEN, (10, 30, 20), (5, 15, 10)
-        elif is_unlocked:
-            border, fill, inner = VIOLET, (20, 10, 35), (10, 5, 20)
-        else:
-            border, fill, inner = DIM, (5, 5, 10), (2, 2, 5)
-        if is_boss:
-            border = AMBER if is_unlocked else RED
-        elif is_semi:
-            border = VIOLET if is_unlocked else MAGENTA
+        category = AMBER if is_boss else VIOLET if is_semi else CYAN
+        if not is_unlocked:
+            category = tuple(int(c * .42 + d * .58)
+                             for c, d in zip(category, DIM))
         if pressed:
-            border = WHITE
-        cut = max(4, int(min(rect.w, rect.h) * 0.16))
-        x, y, w, h = rect.x, rect.y, rect.w, rect.h
-        outer = [(x + cut, y), (x + w - cut, y), (x + w, y + cut), (x + w, y + h - cut),
-                 (x + w - cut, y + h), (x + cut, y + h), (x, y + h - cut), (x, y + cut)]
-        pygame.draw.polygon(SCREEN, fill, outer)
-        pygame.draw.polygon(SCREEN, border, outer, max(2, u(3)))
-        ix, iy, iw, ih = rect.inflate(-u(10), -u(10))
-        ic = max(3, cut - u(2))
-        innerp = [(ix + ic, iy), (ix + iw - ic, iy), (ix + iw, iy + ic), (ix + iw, iy + ih - ic),
-                  (ix + iw - ic, iy + ih), (ix + ic, iy + ih), (ix, iy + ih - ic), (ix, iy + ic)]
-        pygame.draw.polygon(SCREEN, inner, innerp, 1)
-        if is_boss or is_semi:
-            label = "BOSS" if is_boss else "ELITE"
-            lab_col = AMBER if (is_boss and is_unlocked) else (RED if is_boss else MAGENTA)
-            text(SCREEN, label, F(9), lab_col, (rect.centerx, rect.y + u(8)), "midtop")
-            text(SCREEN, str(stage), F(14), WHITE if is_unlocked else MUTED,
-                 (rect.centerx, rect.centery + u(6)), "center")
+            category = WHITE
+        elif hovered:
+            category = tuple(min(255, int(c * 1.18)) for c in category)
+        x, y, w, h = rect
+        cut = min(u(10), max(u(5), h // 7))
+        pts = [(x + cut, y), (x + w - u(7), y), (x + w, y + u(7)),
+               (x + w, y + h - cut), (x + w - cut, y + h),
+               (x + u(7), y + h), (x, y + h - u(7)), (x, y + cut)]
+        fill_key = (w, h, 224 if is_unlocked else 184)
+        fill = self._stage_card_fill_cache.get(fill_key)
+        if fill is None:
+            fill = pygame.Surface((w, h), pygame.SRCALPHA)
+            fill.fill((5, 12, 27, fill_key[2]))
+            self._stage_card_fill_cache[fill_key] = fill
+        SCREEN.blit(fill, rect.topleft)
+        pygame.draw.polygon(SCREEN, (category[0] // 5, category[1] // 5,
+                                     category[2] // 5), pts)
+        pygame.draw.polygon(SCREEN, category, pts, max(1, u(1.4 if hovered else 1)))
+        # Arcade-terminal rails and corner breaks.
+        pygame.draw.line(SCREEN, category, (x + u(3), y + u(9)),
+                         (x + u(3), y + h - u(9)), max(1, u(2)))
+        pygame.draw.line(SCREEN, (category[0] // 2, category[1] // 2,
+                                  category[2] // 2),
+                         (x + u(10), y + h - u(5)), (x + w - u(10), y + h - u(5)), 1)
+        mission_kind = "BOSS" if is_boss else "ELITE" if is_semi else "STANDARD"
+        text(SCREEN, f"OP-{stage:02d}  //  {mission_kind}",
+             self._campaign_font("consolas", 8), category,
+             (x + u(12), y + u(8)), "topleft")
+        number_col = WHITE if is_unlocked else MUTED
+        text(SCREEN, f"{stage:02d}",
+             self._campaign_font("bahnschrift", 22 if w > u(140) else 18),
+             number_col, (x + u(14), y + h // 2 + u(2)), "midleft")
+        status = ("CLEARED" if is_completed else
+                  "READY" if is_unlocked and stage == self.modules.highest_stage
+                  and sector == self.modules.highest_campaign else
+                  "REPLAY" if is_unlocked else "LOCKED")
+        status_col = GREEN if is_completed else category if is_unlocked else MUTED
+        text(SCREEN, status, self._campaign_font("consolas", 8), status_col,
+             (x + w - u(10), y + h // 2 + u(2)), "midright")
+        reward = pve_sys.stage_nominal_reward(
+            stage, self.modules.ship_hull_level, sector)
+        text(SCREEN, f"REWARD  ~{reward:,} CR", self._campaign_font("consolas", 8),
+             AMBER if is_unlocked else MUTED,
+             (x + u(14), y + h - u(18)), "midleft")
+        # Type-coded telemetry glyph: square / twin chevrons / command reticle.
+        gx, gy = x + w - u(19), y + u(14)
+        if is_boss:
+            pygame.draw.circle(SCREEN, category, (gx, gy), u(5), 1)
+            pygame.draw.line(SCREEN, category, (gx - u(8), gy), (gx + u(8), gy), 1)
+            pygame.draw.line(SCREEN, category, (gx, gy - u(8)), (gx, gy + u(8)), 1)
+        elif is_semi:
+            pygame.draw.polygon(SCREEN, category,
+                                [(gx, gy - u(6)), (gx + u(6), gy),
+                                 (gx, gy + u(6)), (gx - u(6), gy)], 1)
         else:
-            text(SCREEN, str(stage), F(16), WHITE if is_unlocked else MUTED,
-                 rect.center, "center")
+            pygame.draw.rect(SCREEN, category,
+                             pygame.Rect(gx - u(4), gy - u(4), u(8), u(8)), 1)
+        if hovered:
+            k = pulse(self.elapsed, 1.4, stage * .37)
+            pygame.draw.line(SCREEN, category, (x + u(10), y + h - u(2)),
+                             (x + u(10) + int((w - u(20)) * k), y + h - u(2)), u(2))
 
     def draw_skill_tree(self):
         W, H = ui_kit.W, ui_kit.H
@@ -5835,7 +6053,7 @@ class Game:
 
     def draw_victory(self):
         """AUFTRAG 6: Endscreen nach der LETZTEN Kampagne (Sektor
-        rpg_config.CAMPAIGN_COUNT - seit AUFTRAG 19 Sektor 8, Stufe 15).
+        rpg_config.CAMPAIGN_COUNT, Stufe 15).
         Nutzt dasselbe Victory-Video + die gleichen Buttons wie STAGE_CLEAR,
         zeigt aber das Kampagnen-Finale und den freigeschalteten NG+-Grad.
         ZUR KARTE fuehrt zurueck zur Karte - der naechste Einsatz laeuft

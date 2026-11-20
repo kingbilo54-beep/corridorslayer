@@ -16,6 +16,7 @@ os.chdir(BASE)
 sys.path.insert(0, BASE)
 
 import pve_system as pve
+import rpg_config
 
 pve.SFX.enabled = False
 
@@ -117,7 +118,7 @@ def simulate_boss(campaign, stage, profile_name, profile):
 def main():
     print("LIVE PvE SIMULATION: actual update(), targeting, projectiles, hits")
     print(f"dt={DT:.4f}s, center={CENTER}, max={MAX_SECONDS}s")
-    for campaign in range(1, 9):
+    for campaign in range(1, rpg_config.CAMPAIGN_COUNT + 1):
         for stage in (5, 10, 15):
             for profile_name, profile in PROFILES.items():
                 simulate_boss(campaign, stage, profile_name, profile)

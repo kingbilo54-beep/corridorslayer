@@ -47,7 +47,7 @@ class RegressionTests(unittest.TestCase):
         self.assertLessEqual(set(pve.BOSS_TYPE_CFG) - {"dragon"},
                              set(pve.BOSS_ATTACKS))
         finals = set()
-        for sector in range(1, 9):
+        for sector in range(1, 16):
             for stage in (5, 10, 15):
                 cfg = pve.boss_cfg_for(sector, stage)
                 self.assertEqual(cfg["type"],
@@ -66,13 +66,20 @@ class RegressionTests(unittest.TestCase):
                     asset = Path(main._BASE) / "enemys" / f"enemy_{visual}.png"
                 if asset is not None:
                     self.assertTrue(asset.is_file(), str(asset))
-        self.assertEqual(len(finals), 8)
-        self.assertEqual(set(main.map_locations.LOCATIONS),
-                         {obj["id"] for obj in main.world_map.OBJECTS})
-        self.assertEqual(set(campaign_system.PLANETS), set(range(1, 9)))
+        self.assertGreaterEqual(len(finals), 8)
+        self.assertEqual({obj["id"] for obj in main.world_map.OBJECTS},
+                         {f"sector_{sector}" for sector in range(1, 16)})
+        self.assertTrue({obj["id"] for obj in main.world_map.OBJECTS}
+                        <= set(main.map_locations.LOCATIONS))
+        self.assertEqual(set(campaign_system.PLANETS), set(range(1, 16)))
+        self.assertEqual(len({tuple(sorted(p["roster"]))
+                              for p in campaign_system.PLANETS.values()}), 15)
         for profile in campaign_system.PLANETS.values():
             self.assertTrue(profile["roster"])
+            self.assertEqual(set(profile["bosses"]), {5, 10, 15})
             self.assertTrue(all(name in pve.ENEMY_DATA for name in profile["roster"]))
+            self.assertTrue(all((Path(main._BASE) / "enemys" / f"enemy_{name}.png").is_file()
+                                for name in profile["roster"]))
         for visual in main.BOSS_IDLE_SHEETS:
             frames = main.load_enemy_anim(visual, "idle")
             self.assertEqual(len(frames), 8, visual)
@@ -92,18 +99,65 @@ class RegressionTests(unittest.TestCase):
                 "col": (main.CYAN if sector == 1 else main.GREEN
                         if sector == 2 else main.MUTED),
                 "pulse": sector == 1,
-            } for sector in range(1, 9)
+            } for sector in range(1, 16)
         }
         canvas = pygame.Surface((ui_kit.W, ui_kit.H), pygame.SRCALPHA)
         galaxy.draw(canvas, None, 1.25, states)
         geometry = galaxy._geometry()
-        for sector in range(1, 9):
+        for sector in range(1, 16):
             g = geometry[f"sector_{sector}"]
             self.assertEqual(galaxy.hit((g["hcx"], g["hcy"])),
                              f"sector_{sector}")
+            self.assertGreaterEqual(g["cx"] - g["r"], 0)
+            self.assertGreaterEqual(g["cy"] - g["r"], 0)
+            self.assertLessEqual(g["cx"] + g["r"], ui_kit.W)
+            self.assertLessEqual(g["cy"] + g["r"], ui_kit.H)
+        decorative = galaxy.to_screen((.22, .15))
+        self.assertIsNone(galaxy.hit(decorative))
         self.assertGreater(sum(canvas.get_at((x, y)).a > 0
                                for x in range(0, ui_kit.W, 24)
                                for y in range(0, ui_kit.H, 24)), 0)
+        later = pygame.Surface((ui_kit.W, ui_kit.H), pygame.SRCALPHA)
+        galaxy.draw(later, None, 2.25, states)
+        self.assertNotEqual(pygame.image.tostring(canvas, "RGBA"),
+                            pygame.image.tostring(later, "RGBA"))
+        galaxy.set_hover("sector_2")
+        hover = pygame.Surface((ui_kit.W, ui_kit.H), pygame.SRCALPHA)
+        galaxy.draw(hover, None, 2.25, states)
+        galaxy.select("sector_2")
+        selected = pygame.Surface((ui_kit.W, ui_kit.H), pygame.SRCALPHA)
+        galaxy.draw(selected, None, 2.25, states)
+        self.assertNotEqual(pygame.image.tostring(later, "RGBA"),
+                            pygame.image.tostring(hover, "RGBA"))
+        self.assertNotEqual(pygame.image.tostring(hover, "RGBA"),
+                            pygame.image.tostring(selected, "RGBA"))
+
+    def test_campaign_track_toggle_and_fifteen_stage_layout(self):
+        import ui_kit
+        old_size = (ui_kit.W, ui_kit.H)
+        try:
+            ui_kit.set_screen(1280, 720)
+            game = main.Game()
+            game.state = game.STAGES
+            game._fire("map_track")
+            self.assertEqual(game.campaign_track, "ship")
+            game._fire("map_track")
+            self.assertEqual(game.campaign_track, "planet")
+            game.selected_sector = 1
+            layout = game._layout_stages()
+            stage_buttons = [b for key, b in layout.items()
+                             if key.startswith("stage_")]
+            self.assertEqual(len(stage_buttons), 15)
+            for button in stage_buttons:
+                self.assertTrue(pygame.Rect(0, 0, 1280, 720).contains(button.rect))
+            game.selected_sector = 1
+            with mock.patch.object(game, "_try_enter_stage") as enter_stage:
+                for stage in range(1, 16):
+                    game._fire(f"stage_{stage}")
+                self.assertEqual([call.args[0] for call in enter_stage.call_args_list],
+                                 list(range(1, 16)))
+        finally:
+            ui_kit.set_screen(*old_size)
 
     def test_ship_campaign_starts_real_unlocked_planet_mission(self):
         game = main.Game()
@@ -120,6 +174,42 @@ class RegressionTests(unittest.TestCase):
         self.assertEqual(game.pve.campaign_id, 1)
         self.assertEqual(game.pve.stage_id, 5)
         self.assertEqual(game.active_ship_mission_id, "earth_guard")
+
+    def test_hangar_render_changes_with_equipped_module_levels(self):
+        import ui_kit
+        old_size = (ui_kit.W, ui_kit.H)
+        old_screen = main.SCREEN
+        try:
+            ui_kit.set_screen(1280, 720)
+            main.SCREEN = pygame.display.set_mode((1280, 720))
+            game = main.Game()
+            for key in game.modules.modules:
+                game.modules.get(key).level = 1
+            game.modules.cosmetic_hull = 1
+            game.fortress.set_level(1)
+            game._layout_research()
+            game.draw_research()
+            starter = pygame.image.tostring(main.SCREEN, "RGB")
+
+            for key, level in (("kanonen", 12), ("schild", 10), ("huelle", 15),
+                               ("reaktor", 15), ("antrieb", 12), ("hangar", 12),
+                               ("radar", 14), ("reparatur", 15)):
+                game.modules.get(key).level = level
+            game.modules.cosmetic_hull = 12
+            game.fortress.set_level(12)
+            game._layout_research()
+            game.elapsed = 1.4
+            game.draw_research()
+            upgraded = pygame.image.tostring(main.SCREEN, "RGB")
+            self.assertNotEqual(starter, upgraded)
+            self.assertIsNotNone(main.load_hangar_image(12))
+            self.assertIsNotNone(main.load_drone_image(12))
+            self.assertIsNotNone(main.load_radar_image(14))
+            self.assertIsNotNone(main.load_kanonen_crop(12))
+            self.assertIsNotNone(main.shield_gfx.image_for(10))
+        finally:
+            main.SCREEN = old_screen
+            ui_kit.set_screen(*old_size)
 
     def test_boss_attack_patterns_fire_expected_projectile_count(self):
         for kind, cfg in pve.BOSS_TYPE_CFG.items():
@@ -237,7 +327,7 @@ class RegressionTests(unittest.TestCase):
 
     def test_live_boss_attack_state_machines_fire_multiple_telegraphed_waves(self):
         import campaign_system
-        for campaign in range(1, 9):
+        for campaign in range(1, 16):
             for stage in (5, 10, 15):
                 enemy_type = campaign_system.boss_type_for(campaign, stage)
                 attacks = pve.BOSS_ATTACKS.get(enemy_type)

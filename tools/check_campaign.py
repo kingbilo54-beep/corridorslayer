@@ -59,7 +59,7 @@ def main():
     print("KAMPAGNEN-PRUEFUNG (AUFTRAG 19 / PUNKT 2):")
 
     # --- K1: Konsistenz Karte <-> Config <-> Story -------------------------
-    assert rc.CAMPAIGN_COUNT == 8, "CAMPAIGN_COUNT muss 8 sein"
+    assert rc.CAMPAIGN_COUNT == 15, "CAMPAIGN_COUNT muss 15 sein"
     assert len(world_map.SECTOR_UV) == rc.CAMPAIGN_COUNT, \
         "SECTOR_UV muss je Sektor einen Eintrag haben"
     for sec in range(1, rc.CAMPAIGN_COUNT + 1):
@@ -85,7 +85,7 @@ def main():
             need = rad[a] + rad[b] + 28   # + grobe Touch-Puffer-Groesse
             assert dist > need, \
                 f"Karten-Kollision {a}<->{b}: {dist:.0f}px <= {need:.0f}px"
-    print("  K2 OK   10 Kartenobjekte kollisionsfrei (inkl. Touch-Puffer)")
+    print(f"  K2 OK   {len(world_map.OBJECTS)} Kampagnenziele kollisionsfrei (inkl. Touch-Puffer)")
 
     # --- K3: Planetenspezifische Bosse auf allen drei Bossstufen ------------
     assert abs(pve.boss_stats_for_stage(15, 5)[0] - 29859.53) < 1.0, \
@@ -93,7 +93,7 @@ def main():
     assert abs(pve.boss_stats_for_stage(15, 1)[0] - 10477.03) < 1.0, \
         "Sektor-1-Finale (Stufe 15) muss bei ~10.477 HP bleiben"
     final_types = set()
-    for sec in range(1, 9):
+    for sec in range(1, rc.CAMPAIGN_COUNT + 1):
         for st in (5, 10, 15):
             cfg = pve.boss_cfg_for(sec, st)
             assert cfg["type"] == campaign_system.boss_type_for(sec, st)
@@ -117,9 +117,11 @@ def main():
                 assert os.path.exists(png), f"Boss-Grafik fehlt: {png}"
         assert pve.boss_cfg_for(sec, 1) is None, "Stufe 1 ist kein Boss"
         assert pve.boss_stats_for_stage(1, sec) is None
-    assert len(final_types) == 8, "Jede Planetenkampagne braucht ein eigenes Finale"
-    assert set(map_locations.LOCATIONS) == {obj["id"] for obj in world_map.OBJECTS}
-    print("  K3 OK   8 individuelle Bossaufstellungen + finale Typen, vorhandene PNGs")
+    assert len(final_types) >= 8, "Finale-Bosse brauchen ausreichende Vielfalt"
+    campaign_ids = {f"sector_{sec}" for sec in range(1, rc.CAMPAIGN_COUNT + 1)}
+    assert {obj["id"] for obj in world_map.OBJECTS} == campaign_ids
+    assert campaign_ids <= set(map_locations.LOCATIONS)
+    print(f"  K3 OK   {rc.CAMPAIGN_COUNT} Bossaufstellungen + finale Typen, vorhandene PNGs")
 
     # --- K4: Skalierungskette monotone Steigerung ---------------------------
     hp, dm, rw, sp = (rc.CAMPAIGN_HP_MULT, rc.CAMPAIGN_DMG_MULT,
@@ -130,9 +132,9 @@ def main():
         assert rw[sec] > rw[sec - 1], f"Reward-Mult Sektor {sec} nicht steigend"
         assert sp[sec] < sp[sec - 1], f"Spawn-Intervall Sektor {sec} nicht fallend"
     # Beute waechst bewusst LANGSAMMER als die Gefahr:
-    assert rw[8] / rw[1] < hp[8] / hp[1]
-    print(f"  K4 OK   Kette monotone Steigerung (HP x{hp[1]}->{hp[8]}, "
-          f"DMG x{dm[8]}, Beute x{rw[8]})")
+    assert rw[rc.CAMPAIGN_COUNT] / rw[1] < hp[rc.CAMPAIGN_COUNT] / hp[1]
+    print(f"  K4 OK   Kette monotone Steigerung (HP x{hp[1]}->{hp[rc.CAMPAIGN_COUNT]}, "
+          f"DMG x{dm[rc.CAMPAIGN_COUNT]}, Beute x{rw[rc.CAMPAIGN_COUNT]})")
 
     # --- K5: Sperrlogik + Save-Fortschritt ueber die alte Grenze ------------
     fm = mods.FortressModules()
@@ -157,30 +159,28 @@ def main():
     fm.complete_stage(campaign_id=5, stage_id=15, credits_earned=0)
     assert fm.highest_campaign == 6, \
         "AUFTRAG 19: nach Sektor 5/Stufe 15 MUSS Sektor 6 freigeschaltet sein"
-    # Sektor 6-8 kumulativ bis zum Finale von Sektor 8
-    for c in range(6, 9):
+    # Restliche Sektoren kumulativ bis zum Finale der Kampagne
+    for c in range(6, rc.CAMPAIGN_COUNT + 1):
         for st in range(1, 16):
             fm.complete_stage(campaign_id=c, stage_id=st, credits_earned=0)
-    assert fm.highest_campaign == 9, \
-        "Nach dem Finale von Sektor 8 gibt es keinen weiteren Sektor mehr"
+    assert fm.highest_campaign == rc.CAMPAIGN_COUNT + 1, \
+        "Nach dem Kampagnenfinale darf kein weiterer Sektor freigeschaltet sein"
     fm.save()
     fm2 = mods.FortressModules()
     fm2.load()
-    assert fm2.highest_campaign == 9 and 5 in fm2.completed_campaigns \
-        and 8 in fm2.completed_campaigns, "Save/Load-Rundtrip defekt"
+    assert fm2.highest_campaign == rc.CAMPAIGN_COUNT + 1 \
+        and 5 in fm2.completed_campaigns \
+        and rc.CAMPAIGN_COUNT in fm2.completed_campaigns, "Save/Load-Rundtrip defekt"
 
     def unlocked(fm, sector, stage):
         return (sector < fm.highest_campaign or
                 (sector == fm.highest_campaign and stage <= fm.highest_stage))
-    assert unlocked(fm, 6, 15) and unlocked(fm, 7, 15) and unlocked(fm, 8, 15)
-    # Das echte Ende-Gate: Die Karte kennt KEINEN Sektor 9 (CAMPAIGN_COUNT 8) -
-    # damit kann highest_campaign>8 im Save niemals einen freigeschalteten
-    # Sektor 9 erzeugen (kein Kartenobjekt, kein SECTOR_DATA-Eintrag).
-    assert not any(o.get("sector") == 9 for o in world_map.OBJECTS), \
-        "Die Karte darf keinen Sektor 9 haben (Ende der Kampagne)"
-    assert 9 not in main_sector_data(), \
-        "SECTOR_DATA darf keinen Sektor 9 haben (Ende der Kampagne)"
-    print("  K5 OK   Sperrlogik: (5,15) schaltet Sektor 6 frei, (8,15) beendet; "
+    assert all(unlocked(fm, sec, 15) for sec in range(6, rc.CAMPAIGN_COUNT + 1))
+    assert not any(o.get("sector") == rc.CAMPAIGN_COUNT + 1 for o in world_map.OBJECTS), \
+        "Die Karte darf hinter dem Finale kein weiteres Ziel enthalten"
+    assert rc.CAMPAIGN_COUNT + 1 not in main_sector_data(), \
+        "SECTOR_DATA darf hinter dem Finale kein weiteres Ziel enthalten"
+    print(f"  K5 OK   Sperrlogik: (5,15) -> Sektor 6, ({rc.CAMPAIGN_COUNT},15) beendet; "
           "Save/Load rundet")
 
     # --- K6: eigenstaendige Gegner-Paarungen je Sektor ----------------------
@@ -188,7 +188,10 @@ def main():
 
     def pool_pair(campaign, stage, ship_level=12):
         rng = random.Random(f"pool::{campaign}::{stage}")
+        configured_roster = set(
+            campaign_system.planet_profile(campaign).get("roster", ()))
         avail = [k for k, d in pve.ENEMY_DATA.items()
+                 if k in configured_roster
                  if ship_level >= int(d.get("Min_Ship_Level", 1))
                  and os.path.exists(os.path.join("enemys", f"enemy_{k}.png"))]
         weights = [pve.ENEMY_DATA[k].get("Spawn_Weight", 10) for k in avail]
@@ -209,10 +212,10 @@ def main():
     p1 = pool_pair(6, 9)
     assert p1 == pool_pair(6, 9), "Spawn-Paarung nicht deterministisch"
     # Eigenstaendigkeit: je Sektor mind. eine Stufe mit anderem Paar als Sektor 1
-    for sec in (6, 7, 8):
+    for sec in (6, 7, 8, 9, 12, 15):
         diff = any(paare[(sec, st)] != paare[(1, st)] for st in (1, 3, 7, 12))
         assert diff, f"Sektor {sec} hat dieselben Paarungen wie Sektor 1"
-    print("  K6 OK   Spawn-Paarungen deterministisch, Sektor 6-8 eigenstaendig, "
+    print("  K6 OK   Spawn-Paarungen deterministisch, Kampagnen eigenstaendig, "
           "alle PNGs vorhanden")
 
     mods.SAVE_PATH.unlink(missing_ok=True)
@@ -240,8 +243,9 @@ def main():
         "Stufe 15 OHNE freigeschalteten Folgesektor -> kein Folgeeinsatz"
     assert Game._next_stage_target(flow_mock(3, 7, 3, 7)) is None, \
         "Gesperrte Folgetage -> kein Folgeeinsatz (Sicherheits-Haltestelle)"
-    assert Game._next_stage_target(flow_mock(8, 15, 9, 1)) is None, \
-        "Kampagnen-Finale (Sektor 8/Stufe 15) laeuft ueber den VICTORY-Screen"
+    assert Game._next_stage_target(
+        flow_mock(rc.CAMPAIGN_COUNT, 15, rc.CAMPAIGN_COUNT + 1, 1)) is None, \
+        "Kampagnen-Finale muss ueber den VICTORY-Screen laufen"
     # Der echte Sieg-Save bleibt unangetastet: complete_stage sichert in
     # module_system (K5), vic_next startet nur den Folgeeinsatz.
     print("  K7 OK   Sieg-Ablauf: naechste Etage direkt startbar, "

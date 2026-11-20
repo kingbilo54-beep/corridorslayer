@@ -32,6 +32,7 @@ sys.path.insert(0, BASE)
 sys.path.insert(0, os.path.join(BASE, "tools"))
 
 import pve_system as pve          # noqa: E402
+import campaign_system            # noqa: E402
 import rpg_config as rcfg         # noqa: E402
 import simulate_boss as sb        # noqa: E402  (build_player, dps_of, MC)
 
@@ -59,10 +60,13 @@ PROFILES = {
     # ausgebautem Schiff (Gegene-HP x3.7-x6.25 gegenueber Sektor 1).
     "Schiff 12 - Endstufe": {"kanonen": 15, "antrieb": 10, "huelle": 9, "schild": 8,
                              "reaktor": 8, "hangar": 8, "radar": 7, "reparatur": 7},
+    "Schiff 12 - Maximum":  {"kanonen": 15, "antrieb": 15, "huelle": 15, "schild": 15,
+                             "reaktor": 15, "hangar": 15, "radar": 15, "reparatur": 15},
 }
 PROFILE_HULL = {"Schiff 4 - knapp": 1, "Schiff 4 - Normal": 2,
                 "Schiff 5 - gewachsen": 2, "Schiff 6-7": 3, "Schiff 8-9": 4,
-                "Schiff 9-10": 5, "Schiff 11-12": 6, "Schiff 12 - Endstufe": 7}
+                "Schiff 9-10": 5, "Schiff 11-12": 6,
+                "Schiff 12 - Endstufe": 7, "Schiff 12 - Maximum": 12}
 
 # Referenzprofil je Sektor (was ein Spieler dort typischerweise hat)
 SEKTOR_PROFILE = {1: ["Schiff 4 - Normal", "Schiff 5 - gewachsen"],
@@ -72,7 +76,14 @@ SEKTOR_PROFILE = {1: ["Schiff 4 - Normal", "Schiff 5 - gewachsen"],
                   5: ["Schiff 11-12"],
                   6: ["Schiff 11-12", "Schiff 12 - Endstufe"],
                   7: ["Schiff 12 - Endstufe"],
-                  8: ["Schiff 12 - Endstufe"]}
+                  8: ["Schiff 12 - Endstufe"],
+                  9: ["Schiff 12 - Maximum"],
+                  10: ["Schiff 12 - Maximum"],
+                  11: ["Schiff 12 - Maximum"],
+                  12: ["Schiff 12 - Maximum"],
+                  13: ["Schiff 12 - Maximum"],
+                  14: ["Schiff 12 - Maximum"],
+                  15: ["Schiff 12 - Maximum"]}
 
 SHIP_X = 150.0            # typische Schiffsposition (Welt-px)
 TARGET_X = 450.0          # ab hier ist ein Gegner zielbar (pve_system)
@@ -87,8 +98,12 @@ def stage_pool(campaign, stage, ship_level):
     """Exakte Nachbildung der Pool-Auswahl aus pve_system._spawn_single_enemy."""
     rng = random.Random(f"pool::{campaign}::{stage}")
     available, weights = [], []
+    profile = campaign_system.planet_profile(campaign) or {}
+    roster = set(profile.get("roster", ()))
     for k, data in pve.ENEMY_DATA.items():
-        if ship_level >= int(data.get("Min_Ship_Level", 1)):
+        if ((not roster or k in roster)
+                and ship_level >= int(data.get("Min_Ship_Level", 1))
+                and os.path.exists(os.path.join(pve.ENEMY_FOLDER, f"enemy_{k}.png"))):
             available.append(k)
             weights.append(data.get("Spawn_Weight", 10))
     if not available:
