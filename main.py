@@ -3140,6 +3140,37 @@ class Game:
             self.nexus.fire(pos[0], pos[1], branch["color"] if branch else CYAN)
         self.show_message(f"Skill trainiert: {node_id}")
 
+    def _award_level_cores(self, levels):
+        cores = max(0, int(levels)) * rpg_config.LEVEL_REWARD_CORES
+        self.modules.data_cores += cores
+        return cores
+
+    def _quantum_skill_respec(self):
+        cost = rpg_config.QUANTUM_SKILL_RESET_COST
+        if not self.skills.levels:
+            self.show_message("Keine Skills zum Neuverteilen")
+            return
+        if self.rpg.quantum < cost:
+            self.show_message(f"Neuverteilen kostet {cost} QUANTUM")
+            return
+        old_levels = dict(self.skills.levels)
+        old_cores, old_quantum = self.modules.data_cores, self.rpg.quantum
+        refund = self.skills.reset_all(save=True)
+        if refund is None:
+            self.show_message("Skill-Spielstand konnte nicht gespeichert werden")
+            return
+        self.modules.data_cores += refund
+        self.rpg.spend_quantum(cost)
+        if not self._save_modules():
+            self.skills.levels = old_levels
+            self.skills.save()
+            self.modules.data_cores, self.rpg.quantum = old_cores, old_quantum
+            self.show_message("Neuverteilung nicht gespeichert; Kauf abgebrochen")
+            return
+        self.nexus.select(None)
+        self._sync_modules_to_combat()
+        self.show_message(f"Skills neu verteilt: {refund} CORES rueckerstattet")
+
     def _quit(self):
         self._collect_idle_loot()
         self.running = False
@@ -3545,7 +3576,10 @@ class Game:
                     self.last_xp_gain = rpg_config.campaign_xp(
                         self.pve.stage_id, bool(getattr(self.pve, "is_repeat", False)))
                     self.last_levelups, _ = self.rpg.add_xp(self.last_xp_gain)
+                    if self.last_levelups:
+                        self._award_level_cores(self.last_levelups)
                     self.quests.record_mission_clear()
+                    self._save_modules()
                     self.last_stage_reward = result["credits_earned"]
                     self.victory_timer = 0.0
                     if final_win:
@@ -3760,6 +3794,8 @@ class Game:
                 self.state = self.MENU
             elif bid == "nex_train":
                 self._skill_train()
+            elif bid == "nex_respec":
+                self._quantum_skill_respec()
             elif bid == "nex_close":
                 self.nexus.select(None)
             return
@@ -4574,7 +4610,7 @@ class Game:
         W, H = ui_kit.W, ui_kit.H
         m = margin()
         isz = icon_touch()
-        top = m + isz + u(12)
+        top = m + isz + btn_h() + u(24)
         if W > H:
             bottom = H - u(12)          # Landscape: volle Hoehe, Sheet rechts
         else:
@@ -4587,6 +4623,14 @@ class Game:
         ui = {}
         isz = icon_touch()
         ui["nex_back"] = Btn("nex_back", pygame.Rect(m, m, isz, isz), icon="back", accent=AMBER)
+        reset_w = min(u(210), W - 2 * m - isz - u(10))
+        ui["nex_respec"] = Btn(
+            "nex_respec",
+            pygame.Rect(W - m - reset_w, m + isz + u(5), reset_w, btn_h()),
+            f"SKILLS NEU  ·  {rpg_config.QUANTUM_SKILL_RESET_COST} Q",
+            "Cores werden erstattet", VIOLET,
+            enabled=bool(self.skills.levels)
+                and self.rpg.quantum >= rpg_config.QUANTUM_SKILL_RESET_COST)
         top, bottom = self._nex_area()
         for nid, rect in self.nexus.hitmap.items():
             ui["node_" + nid] = Btn("node_" + nid, rect, accent=AMBER)
@@ -5384,6 +5428,8 @@ class Game:
                         top, bottom, bg=self.nexus_bg)
         self._ui = self._layout_skilltree()
         draw_compact_icon_btn(SCREEN, self._ui["nex_back"], pressed=self._pressed("nex_back"))
+        draw_compact_btn(SCREEN, self._ui["nex_respec"],
+                         pressed=self._pressed("nex_respec"))
         neon_text(SCREEN, "SKILL-NEXUS", F(15), AMBER, (W // 2, m + isz // 2), "center", 1)
         text(SCREEN, f"DATA CORES: {cores}", F(11), GREEN if cores > 0 else RED,
              (W - m - u(6), m + isz // 2), "midright")
@@ -6045,7 +6091,9 @@ class Game:
             col = CYAN if self.last_levelups <= 0 else GREEN
             msg = f"+{self.last_xp_gain} XP  ·  SPIELER LVL {self.rpg.level}"
             if self.last_levelups > 0:
-                msg = f"+{self.last_xp_gain} XP  ·  LEVEL-AUFSCHWUNG: LVL {self.rpg.level}!"
+                cores = self.last_levelups * rpg_config.LEVEL_REWARD_CORES
+                msg = (f"+{self.last_xp_gain} XP  ·  LEVELAUFSTIEG: LVL "
+                       f"{self.rpg.level}  ·  +{cores} CORES")
             neon_text(SCREEN, msg, F(13), col,
                       (W // 2, int(H * 0.44) + u(70)), "midtop", 1)
         for bid, b in self._ui.items():
@@ -6112,6 +6160,8 @@ class Game:
             parts.append(f"+{gained} XP")
             if ups:
                 parts.append(f"LEVEL {self.rpg.level}!")
+                cores = self._award_level_cores(ups)
+                parts.append(f"LEVELBONUS +{cores} CORES")
         if rw.get("credits"):
             self.modules.credits += int(rw["credits"])
             parts.append(f"+{rw['credits']:,} Cr")

@@ -1,117 +1,136 @@
 # -*- coding: utf-8 -*-
-"""CORRIDOR SLAYER | PAKET 8 - SPIELERPROGRESSION (XP / LEVEL / QUANTUM)
-========================================================================
-Eigenstaendiges Spielerlevel ueber den Modul- und Skill-Systemen:
-
-  - XP aus Kampagnenmissionen und Quests
-  - Levelaufstieg ueber die zentrale Kurve (rpg_config.xp_for_level)
-  - Premium-Waehrung QUANTUM (neu, getrennt von Credits/Data Cores)
-
-WICHTIG: Das Spielerlevel veraendert bewusst KEINE bestehenden Modul-,
-Schiffs- oder Gefechtswerte. Es dient der langfristigen Progression und
-spaeteren Freischaltungen (Architektur dafuer: `level` abfragbar).
-
-Persistenz: der Spielstand (corridor_slayer_modules.json) wird um den
-Schluessel "rpg" erweitert; alte Saves ohne diesen Schluessel erhalten
-sichere Defaults (siehe module_system.FortressModules).
-"""
+"""Persistente Spielerprogression mit robustem Laden alter RPG-Spielstaende."""
 import rpg_config as rcfg
 
 
-class PlayerProgress:
-    """Spielerlevel + XP + Premium-Waehrung."""
+def _int_field(data, key, default=0, minimum=None, maximum=None):
+    """Liest eine einzelne Zahl ohne dass ein kaputtes Feld andere Daten killt."""
+    value = data.get(key, default)
+    if isinstance(value, bool):
+        value = default
+    try:
+        value = int(value)
+    except (TypeError, ValueError, OverflowError):
+        value = default
+    if minimum is not None:
+        value = max(minimum, value)
+    if maximum is not None:
+        value = min(maximum, value)
+    return value
 
+
+class PlayerProgress:
     def __init__(self):
         self.level = 1
         self.xp = 0
         self.quantum = 0
         self.total_xp = 0
 
-    # ---------------- XP ----------------
     def xp_to_next(self):
-        """XP, die zum naechsten Level fehlen (None auf Maximallevel)."""
         need = rcfg.xp_for_level(self.level)
-        if need is None:
-            return None
-        return max(0, need - self.xp)
+        return None if need is None else max(0, need - self.xp)
 
     def xp_ratio(self):
-        """Fortschritt zum naechsten Level als 0..1 (1.0 = aufgestiegen)."""
         need = rcfg.xp_for_level(self.level)
         if need is None:
             return 1.0
         return max(0.0, min(1.0, self.xp / float(need)))
 
     def add_xp(self, amount):
-        """XP gutschreiben; liefert (new_levels, total_gained).
-        Mehrfachaufstiege in einem Ruf werden korrekt verarbeitet."""
-        amount = max(0, int(amount))
-        if amount <= 0:
+        try:
+            amount = int(amount)
+        except (TypeError, ValueError, OverflowError):
+            return 0, 0
+        amount = max(0, amount)
+        if amount <= 0 or self.level >= rcfg.PLAYER_MAX_LEVEL:
             return 0, 0
         self.xp += amount
         self.total_xp += amount
         ups = 0
-        while True:
+        while self.level < rcfg.PLAYER_MAX_LEVEL:
             need = rcfg.xp_for_level(self.level)
-            if need is None or self.xp < need:
+            if self.xp < need:
                 break
             self.xp -= need
             self.level += 1
             ups += 1
+        if self.level >= rcfg.PLAYER_MAX_LEVEL:
+            self.xp = 0
         return ups, amount
 
-    # ---------------- QUANTUM (Premium) ----------------
     def add_quantum(self, amount):
-        self.quantum = max(0, self.quantum + int(amount))
+        try:
+            amount = int(amount)
+        except (TypeError, ValueError, OverflowError):
+            return False
+        if amount < 0:
+            return False
+        self.quantum += amount
+        return True
 
     def spend_quantum(self, amount):
-        amount = int(amount)
-        if self.quantum < amount:
+        if isinstance(amount, bool):
+            return False
+        try:
+            amount = int(amount)
+        except (TypeError, ValueError, OverflowError):
+            return False
+        if amount < 0 or self.quantum < amount:
             return False
         self.quantum -= amount
         return True
 
-    # ---------------- Persistenz ----------------
     def serialize(self):
         return {"level": int(self.level), "xp": int(self.xp),
-                "quantum": int(self.quantum), "total_xp": int(self.total_xp)}
+                "quantum": int(self.quantum), "total_xp": int(self.total_xp),
+                "progression_version": 2}
 
     def restore(self, data):
         if not isinstance(data, dict):
             return
-        self.level = max(1, int(data.get("level", 1)))
-        self.xp = max(0, int(data.get("xp", 0)))
-        self.quantum = max(0, int(data.get("quantum", 0)))
-        self.total_xp = max(0, int(data.get("total_xp", 0)))
-        # Konsistenz-Klammer: Level nie ueber die Kurve hinaus fuettern
-        while self.level > 1 and rcfg.xp_for_level(self.level - 1) is not None \
-                and self.xp >= rcfg.xp_for_level(self.level):
-            need = rcfg.xp_for_level(self.level)
-            if need is None:
-                break
-            self.xp -= need
-            self.level += 1
+        level = _int_field(data, "level", 1, 1, rcfg.PLAYER_MAX_LEVEL)
+        xp = _int_field(data, "xp", 0, 0)
+        quantum = _int_field(data, "quantum", 0, 0)
+        total_xp = _int_field(data, "total_xp", 0, 0)
+        version = _int_field(data, "progression_version", 0, 0)
+        if version < 2 and level < rcfg.PLAYER_MAX_LEVEL:
+            old_need = max(1, int(round(300 * (1.32 ** (level - 1)))))
+            new_need = rcfg.xp_for_level(level)
+            xp = min(new_need - 1, int(xp * new_need / old_need))
+        if level >= rcfg.PLAYER_MAX_LEVEL:
+            level, xp = rcfg.PLAYER_MAX_LEVEL, 0
+        else:
+            while level < rcfg.PLAYER_MAX_LEVEL and xp >= rcfg.xp_for_level(level):
+                xp -= rcfg.xp_for_level(level)
+                level += 1
+            if level >= rcfg.PLAYER_MAX_LEVEL:
+                xp = 0
+        self.level, self.xp = level, xp
+        self.quantum, self.total_xp = quantum, total_xp
 
 
 class RPGBundle:
-    """Vereint Progress, Quests und Beschoerung zu EINEM Serialisierungs-
-    block fuer den Spielstand (Schluessel "rpg" in corridor_slayer_modules.json)."""
-
     def __init__(self, progress, quests, summon):
-        self.progress = progress
-        self.quests = quests
-        self.summon = summon
+        self.progress, self.quests, self.summon = progress, quests, summon
 
     def serialize(self):
-        return {
-            "progress": self.progress.serialize(),
-            "quests": self.quests.serialize(),
-            "summon": self.summon.serialize(),
-        }
+        return {"progress": self.progress.serialize(),
+                "quests": self.quests.serialize(),
+                "summon": self.summon.serialize()}
 
     def restore(self, data):
         if not isinstance(data, dict):
             return
-        self.progress.restore(data.get("progress", {}))
-        self.quests.restore(data.get("quests", {}))
-        self.summon.restore(data.get("summon", {}))
+        # Ein fehlerhafter Unterblock darf andere gueltige RPG-Daten nicht
+        # verhindern. Jede Implementierung verwirft nur eigene kaputte Felder.
+        for key, target in (("progress", self.progress), ("quests", self.quests),
+                            ("summon", self.summon)):
+            raw = data.get(key)
+            if not isinstance(raw, dict):
+                continue
+            try:
+                target.restore(raw)
+            except Exception:
+                # Default des betroffenen Subsystems beibehalten. Validierte
+                # Einzel-Feld-Wiederherstellung bewahrt gueltige Geschwister.
+                continue

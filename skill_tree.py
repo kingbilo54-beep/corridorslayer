@@ -255,6 +255,16 @@ class SkillTree:
         self.save()
         return self.level_of(node_id)
 
+    def reset_all(self, save=True):
+        """Loescht die Verteilung; Rueckgabe ist der bezahlte Corewert."""
+        refund = self.total_spent()
+        previous = dict(self.levels)
+        self.levels = {}
+        if save and not self.save():
+            self.levels = previous
+            return None
+        return refund
+
     def save(self):
         self.save_error = None
         try:

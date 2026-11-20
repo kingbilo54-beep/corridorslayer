@@ -196,15 +196,24 @@ class SummonSystem:
         raw = data.get("owned", {})
         if isinstance(raw, dict):
             known = rcfg.UNITS_BY_KEY
-            self.owned = {str(k): max(0, int(v)) for k, v in raw.items()
-                          if k in known and v > 0}
+            clean_owned = {}
+            for key, value in raw.items():
+                if key not in known or isinstance(value, bool):
+                    continue
+                try:
+                    count = int(value)
+                except (TypeError, ValueError, OverflowError):
+                    continue
+                if count > 0:
+                    clean_owned[str(key)] = count
+            self.owned = clean_owned
         # AUFTRAG 8: Champion-Slots zuruecklesen - nur gueltige, besessene
         # Helden (alte Saves ohne den Key behalten die Leer-Slots).
         eq = data.get("equipped")
         if isinstance(eq, list):
             slots = [None] * rcfg.CHAMPION_SLOTS
             for i, key in enumerate(eq[:rcfg.CHAMPION_SLOTS]):
-                unit = rcfg.UNITS_BY_KEY.get(key) if key else None
+                unit = rcfg.UNITS_BY_KEY.get(key) if isinstance(key, str) else None
                 if unit and unit.get("hero") and key in self.owned \
                         and key not in slots:
                     slots[i] = key

@@ -129,12 +129,15 @@ CAMPAIGN_COUNT = 15
 # ----------------------------------------------------------------------
 # SPIELERLEVEL / XP-KURVE (zentral konfigurierbar)
 # ----------------------------------------------------------------------
-# XP von Stufe L auf L+1:  round(BASE * GROWTH^(L-1) + LINEAR*(L-1))
-# Bewusst moderat: 1.32er Wachstum - "darf nicht zu schnell steigen".
+# XP von L nach L+1: BASE + STEP * (L-1). Die alte exponentielle
+# Kurve benoetigte ~12,19 Mrd. XP bis L60. Die lineare Kurve benoetigt
+# 111.805 XP: ca. 2,5 komplette Erstabschlusslaeufe aller 15x15 Missionen
+# (44.550 XP je Lauf); Wiederholungen geben weiterhin nur 40%.
 PLAYER_XP_BASE = 300
-PLAYER_XP_GROWTH = 1.32
-PLAYER_XP_LINEAR = 0
+PLAYER_XP_STEP = 55
 PLAYER_MAX_LEVEL = 60
+LEVEL_REWARD_CORES = 1
+QUANTUM_SKILL_RESET_COST = 120
 
 # ----------------------------------------------------------------------
 # KAMPAGNEN-XP
@@ -163,8 +166,7 @@ def xp_for_level(level):
     if level >= PLAYER_MAX_LEVEL:
         return None
     l = max(1, int(level))
-    return max(1, int(round(PLAYER_XP_BASE * (PLAYER_XP_GROWTH ** (l - 1))
-                            + PLAYER_XP_LINEAR * (l - 1))))
+    return PLAYER_XP_BASE + PLAYER_XP_STEP * (l - 1)
 
 
 # ----------------------------------------------------------------------

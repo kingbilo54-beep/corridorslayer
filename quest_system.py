@@ -186,11 +186,27 @@ class QuestSystem:
             raw = data.get(key)
             if not isinstance(raw, dict):
                 continue
-            scope["period"] = str(raw.get("period", ""))
+            period = raw.get("period", "")
+            if isinstance(period, str) and len(period) <= 16:
+                scope["period"] = period
             prog = raw.get("prog", {})
-            scope["prog"] = {str(k): max(0, int(v))
-                             for k, v in prog.items()} if isinstance(prog, dict) else {}
+            if isinstance(prog, dict):
+                goals = {q["id"]: q["goal"] for q in self.active_defs(key)}
+                clean_prog = {}
+                for qid, value in prog.items():
+                    if str(qid) not in goals or isinstance(value, bool):
+                        continue
+                    try:
+                        clean_prog[str(qid)] = min(goals[str(qid)], max(0, int(value)))
+                    except (TypeError, ValueError, OverflowError):
+                        continue
+                scope["prog"] = clean_prog
             claimed = raw.get("claimed", [])
-            scope["claimed"] = [str(x) for x in claimed] if isinstance(claimed, list) else []
-            scope["bonus_claimed"] = bool(raw.get("bonus_claimed", False))
+            if isinstance(claimed, list):
+                valid_ids = {q["id"] for q in self.active_defs(key)}
+                scope["claimed"] = list(dict.fromkeys(
+                    str(x) for x in claimed if str(x) in valid_ids))
+            bonus = raw.get("bonus_claimed", False)
+            if isinstance(bonus, bool):
+                scope["bonus_claimed"] = bonus
         self.refresh()   # perioden-fremde Daten (alter Tag/alte Woche) direkt umsetzen
