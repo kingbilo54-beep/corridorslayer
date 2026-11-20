@@ -1,0 +1,57 @@
+{
+  "name": "enemy_crystal",
+  "attack_type": "lightning_storm",
+  "attack_description": "Radial lightning storm with ice shards",
+  "sheet": {
+    "file": "enemy_crystal_sheet.png",
+    "cell": 512,
+    "columns": 8,
+    "rows": 4,
+    "width": 4096,
+    "height": 2048,
+    "note": "Rows: 0=idle, 1=move, 2=attack, 3=hit. Unused cells are fully transparent."
+  },
+  "animations": {
+    "idle": {
+      "row": 0,
+      "frames": 6,
+      "fps": 8,
+      "loop": true
+    },
+    "move": {
+      "row": 1,
+      "frames": 6,
+      "fps": 10,
+      "loop": true
+    },
+    "attack": {
+      "row": 2,
+      "frames": 8,
+      "fps": 12,
+      "loop": false
+    },
+    "hit": {
+      "row": 3,
+      "frames": 4,
+      "fps": 10,
+      "loop": false
+    }
+  },
+  "anchor": {
+    "center_in_cell": [
+      256,
+      256
+    ]
+  },
+  "source": {
+    "file": "enemy_crystal.png",
+    "size": [
+      398,
+      487
+    ],
+    "normalized_size": [
+      294,
+      360
+    ]
+  }
+}

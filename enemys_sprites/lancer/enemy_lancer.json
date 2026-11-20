@@ -1,0 +1,57 @@
+{
+  "name": "enemy_lancer",
+  "attack_type": "blade_dash",
+  "attack_description": "Charged blade ram dash with afterimages",
+  "sheet": {
+    "file": "enemy_lancer_sheet.png",
+    "cell": 512,
+    "columns": 8,
+    "rows": 4,
+    "width": 4096,
+    "height": 2048,
+    "note": "Rows: 0=idle, 1=move, 2=attack, 3=hit. Unused cells are fully transparent."
+  },
+  "animations": {
+    "idle": {
+      "row": 0,
+      "frames": 6,
+      "fps": 8,
+      "loop": true
+    },
+    "move": {
+      "row": 1,
+      "frames": 6,
+      "fps": 10,
+      "loop": true
+    },
+    "attack": {
+      "row": 2,
+      "frames": 8,
+      "fps": 12,
+      "loop": false
+    },
+    "hit": {
+      "row": 3,
+      "frames": 4,
+      "fps": 10,
+      "loop": false
+    }
+  },
+  "anchor": {
+    "center_in_cell": [
+      274,
+      256
+    ]
+  },
+  "source": {
+    "file": "enemy_lancer.png",
+    "size": [
+      256,
+      258
+    ],
+    "normalized_size": [
+      357,
+      360
+    ]
+  }
+}
