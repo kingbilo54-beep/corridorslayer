@@ -43,18 +43,83 @@ class RegressionTests(unittest.TestCase):
         self.assertIn(game.state, (game.INTRO, game.MENU))
 
     def test_campaign_bosses_have_assets_and_configs(self):
+        import campaign_system
         self.assertLessEqual(set(pve.BOSS_TYPE_CFG) - {"dragon"},
                              set(pve.BOSS_ATTACKS))
-        for sector in range(6, 9):
+        finals = set()
+        for sector in range(1, 9):
             for stage in (5, 10, 15):
                 cfg = pve.boss_cfg_for(sector, stage)
+                self.assertEqual(cfg["type"],
+                                 campaign_system.boss_type_for(sector, stage))
                 self.assertIn(cfg["type"], pve.BOSS_TYPE_CFG)
+                if stage == 15:
+                    finals.add(cfg["type"])
                 visual = cfg.get("phase_type", cfg["type"])
-                folder, filename = main.BOSS_IDLE_SHEETS[visual]
-                self.assertTrue((Path(main._BASE) / "enemys" / folder / filename).is_file())
+                if visual == "dragon":
+                    self.assertGreaterEqual(len(main.load_enemy_anim("dragon", "idle")), 2)
+                    asset = None
+                elif visual in main.BOSS_IDLE_SHEETS:
+                    folder, filename = main.BOSS_IDLE_SHEETS[visual]
+                    asset = Path(main._BASE) / "enemys" / folder / filename
+                else:
+                    asset = Path(main._BASE) / "enemys" / f"enemy_{visual}.png"
+                if asset is not None:
+                    self.assertTrue(asset.is_file(), str(asset))
+        self.assertEqual(len(finals), 8)
+        self.assertEqual(set(main.map_locations.LOCATIONS),
+                         {obj["id"] for obj in main.world_map.OBJECTS})
+        self.assertEqual(set(campaign_system.PLANETS), set(range(1, 9)))
+        for profile in campaign_system.PLANETS.values():
+            self.assertTrue(profile["roster"])
+            self.assertTrue(all(name in pve.ENEMY_DATA for name in profile["roster"]))
         for visual in main.BOSS_IDLE_SHEETS:
             frames = main.load_enemy_anim(visual, "idle")
             self.assertEqual(len(frames), 8, visual)
+
+    def test_all_planets_draw_as_clickable_status_markers(self):
+        import ui_kit
+        import world_map
+        galaxy = world_map.GalaxyMap()
+        galaxy.prepare(None)
+        states = {
+            f"sector_{sector}": {
+                "name": f"PLANET {sector}",
+                "status": ("AKTIV" if sector == 1 else "ABGESCHLOSSEN"
+                           if sector == 2 else "GESPERRT"),
+                "status_col": (main.CYAN if sector == 1 else main.GREEN
+                               if sector == 2 else main.MUTED),
+                "col": (main.CYAN if sector == 1 else main.GREEN
+                        if sector == 2 else main.MUTED),
+                "pulse": sector == 1,
+            } for sector in range(1, 9)
+        }
+        canvas = pygame.Surface((ui_kit.W, ui_kit.H), pygame.SRCALPHA)
+        galaxy.draw(canvas, None, 1.25, states)
+        geometry = galaxy._geometry()
+        for sector in range(1, 9):
+            g = geometry[f"sector_{sector}"]
+            self.assertEqual(galaxy.hit((g["hcx"], g["hcy"])),
+                             f"sector_{sector}")
+        self.assertGreater(sum(canvas.get_at((x, y)).a > 0
+                               for x in range(0, ui_kit.W, 24)
+                               for y in range(0, ui_kit.H, 24)), 0)
+
+    def test_ship_campaign_starts_real_unlocked_planet_mission(self):
+        game = main.Game()
+        game.campaign_track = "ship"
+        game.active_ship_id = "fortress"
+        game.modules.ship_campaign_progress = {}
+        game.modules.highest_campaign = 1
+        game.modules.highest_stage = 5
+        game.modules.cosmetic_hull = 1
+        game.map_sel = "sector_1"
+        game.gmap.select("sector_1")
+        game._map_action()
+        self.assertEqual(game.state, game.PLAYING)
+        self.assertEqual(game.pve.campaign_id, 1)
+        self.assertEqual(game.pve.stage_id, 5)
+        self.assertEqual(game.active_ship_mission_id, "earth_guard")
 
     def test_boss_attack_patterns_fire_expected_projectile_count(self):
         for kind, cfg in pve.BOSS_TYPE_CFG.items():
@@ -171,35 +236,44 @@ class RegressionTests(unittest.TestCase):
                                  {attack.get("motion", "straight")})
 
     def test_live_boss_attack_state_machines_fire_multiple_telegraphed_waves(self):
-        for enemy_type, attacks in pve.BOSS_ATTACKS.items():
-            with self.subTest(enemy_type=enemy_type):
-                combat = pve.PvECombat(is_idle=False)
-                boss = pve.Enemy(enemy_type, 1e9, 1e9, 20, 20, 1,
-                                 enemy_type, x=pve.BOSS_HOLD_X.get(enemy_type, 440),
-                                 y=270, is_boss=True)
-                boss.boss_attack_timer = .1
-                combat.enemies = [boss]
-                combat.boss_ref = boss
-                phases = set()
-                fired = 0
-                attack_starts = []
-                last_phase = "rest"
-                used_attacks = set()
-                for frame in range(600):
-                    before = boss.volley
-                    combat.update(.05, center=(100, 270))
-                    phases.add(boss.boss_attack_phase)
-                    fired += boss.volley - before
-                    if boss.boss_attack_phase == "telegraph" and last_phase != "telegraph":
-                        attack_starts.append(frame * .05)
-                        used_attacks.add(boss.boss_attack_key)
-                    last_phase = boss.boss_attack_phase
-                self.assertGreaterEqual(fired, 3)
-                self.assertTrue({"telegraph", "fire", "recovery"}.issubset(phases))
-                self.assertGreaterEqual(len(used_attacks), 2)
-                self.assertTrue(all(b - a > 1.0
-                                    for a, b in zip(attack_starts, attack_starts[1:])))
-                self.assertEqual(used_attacks, {a["name"] for a in attacks})
+        import campaign_system
+        for campaign in range(1, 9):
+            for stage in (5, 10, 15):
+                enemy_type = campaign_system.boss_type_for(campaign, stage)
+                attacks = pve.BOSS_ATTACKS.get(enemy_type)
+                if not attacks:
+                    continue  # The dragon's breath/bomb/spike runtime is tested below.
+                with self.subTest(campaign=campaign, stage=stage,
+                                  enemy_type=enemy_type):
+                    combat = pve.PvECombat(is_idle=False,
+                                           campaign_id=campaign, stage_id=stage)
+                    combat._spawn_single_enemy()
+                    boss = combat.enemies[-1]
+                    self.assertEqual(boss.enemy_type, enemy_type)
+                    # Keep the actual spawned boss alive long enough to observe
+                    # both attacks after its approach and the normal cooldowns.
+                    boss.hp = boss.max_hp = 1e12
+                    combat.player_hp = combat.max_player_hp = 1e12
+                    phases = set()
+                    fired = 0
+                    attack_starts = []
+                    last_phase = "rest"
+                    used_attacks = set()
+                    for frame in range(800):
+                        before = boss.volley
+                        combat.update(.05, center=(100, 270))
+                        phases.add(boss.boss_attack_phase)
+                        fired += boss.volley - before
+                        if boss.boss_attack_phase == "telegraph" and last_phase != "telegraph":
+                            attack_starts.append(frame * .05)
+                            used_attacks.add(boss.boss_attack_key)
+                        last_phase = boss.boss_attack_phase
+                    self.assertGreaterEqual(fired, 3)
+                    self.assertTrue({"telegraph", "fire", "recovery"}.issubset(phases))
+                    self.assertGreaterEqual(len(used_attacks), 2)
+                    self.assertTrue(all(b - a > 1.0
+                                        for a, b in zip(attack_starts, attack_starts[1:])))
+                    self.assertEqual(used_attacks, {a["name"] for a in attacks})
 
     def test_projectile_visual_types_render_on_live_fx_path(self):
         from combat_fx import CombatFX
@@ -291,6 +365,26 @@ class RegressionTests(unittest.TestCase):
         write_json(path, {"credits": 42, "levels": {"antrieb": 15}})
         self.assertEqual(read_json(path),
                          {"credits": 42, "levels": {"antrieb": 15}})
+
+    def test_ship_campaign_progress_migrates_and_saves_separately(self):
+        import module_system
+        path = Path(_test_data.name) / "legacy_campaign_save.json"
+        write_json(path, {"credits": 321, "highest_campaign": 2,
+                          "highest_stage": 4, "completed_stages": [[1, 3]]})
+        with mock.patch.object(module_system, "SAVE_PATH", path):
+            manager = module_system.FortressModules()
+            manager.load()
+            self.assertEqual(manager.ship_campaign_progress, {})
+            self.assertEqual(manager.highest_campaign, 2)
+            self.assertIn((1, 3), manager.completed_stages)
+            self.assertTrue(manager.complete_ship_mission("fortress", "earth_guard"))
+            self.assertFalse(manager.complete_ship_mission("fortress", "earth_guard"))
+            reloaded = module_system.FortressModules()
+            reloaded.load()
+        self.assertEqual(reloaded.ship_campaign_progress,
+                         {"fortress": ["earth_guard"]})
+        self.assertEqual(reloaded.highest_campaign, 2)
+        self.assertEqual(reloaded.completed_stages, [(1, 3)])
 
     def test_player_regeneration_never_exceeds_max_hp(self):
         combat = pve.PvECombat(is_idle=True)

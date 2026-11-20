@@ -137,6 +137,8 @@ class FortressModules:
     highest_stage: int = 1
     completed_stages: list = field(default_factory=list)
     completed_campaigns: list = field(default_factory=list)
+    # Per-playable-hull campaign progress; kept separate from planet clears.
+    ship_campaign_progress: dict = field(default_factory=dict)
     # PAKET 7B: kosmetisches Schiffslevel (STRIKT vom Gameplay getrennt).
     # Wird NIE automatisch veraendert - nur ein spaeteres Skin-Menue darf es
     # umschalten. Gameplay-Upgrades beruehren diese Zahl nicht.
@@ -268,6 +270,16 @@ class FortressModules:
 
         self.save()
 
+    def complete_ship_mission(self, ship_id, mission_id):
+        """Record a ship-track clear without mutating planet progression."""
+        ship_id, mission_id = str(ship_id), str(mission_id)
+        completed = self.ship_campaign_progress.setdefault(ship_id, [])
+        if mission_id in completed:
+            return False
+        completed.append(mission_id)
+        self.save()
+        return True
+
     def load(self):
         self.load_error = None
         try:
@@ -282,6 +294,12 @@ class FortressModules:
             self.highest_stage = max(1, int(data.get("highest_stage", 1)))
             self.completed_stages = [tuple(s) for s in data.get("completed_stages", [])]
             self.completed_campaigns = data.get("completed_campaigns", [])
+            raw_ship_tracks = data.get("ship_campaign_progress", {})
+            self.ship_campaign_progress = {
+                str(ship): list(dict.fromkeys(str(mission) for mission in missions))
+                for ship, missions in raw_ship_tracks.items()
+                if isinstance(missions, (list, tuple))
+            } if isinstance(raw_ship_tracks, dict) else {}
             # PAKET 7B: neue Felder mit sicheren Defaults (alte Saves bleiben
             # voll kompatibel - fehlende Keys werden einfach ergaenzt).
             self.cosmetic_hull = max(1, int(data.get("cosmetic_hull", 1)))
@@ -332,6 +350,7 @@ class FortressModules:
                 "highest_stage": int(self.highest_stage),
                 "completed_stages": self.completed_stages,
                 "completed_campaigns": self.completed_campaigns,
+                "ship_campaign_progress": self.ship_campaign_progress,
                 "cosmetic_hull": int(self.cosmetic_hull),
                 "ng_plus": int(getattr(self, "ng_plus", 0)),
                 "saved_at": time.time(),

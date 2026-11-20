@@ -161,6 +161,7 @@ from upgrade_fx import UpgradeFX
 # PAKET 8: RPG-Progression, Quests, Beschwörung (Werte in rpg_config.py)
 import datetime
 import rpg_config
+import campaign_system
 import rpg_progression
 import quest_system
 import summon_system
@@ -2453,26 +2454,8 @@ def load_video_any(candidates, label="Video"):
 # PAKET 7D: Jeder Sektor erzaehlt seinen Abschnitt der Kampagne - die
 # Weltkarte zeigt NUR NOCH Kampagnen-Inhalte (keine Menues mehr).
 SECTOR_DATA = {
-    1: {"name": "ERDE",
-        "story": "Heimatwelt der Flotte. Erste Verteidigungslinie gegen die Invasionsflotte."},
-    2: {"name": "RAUMSTATION",
-        "story": "Verlassene Orbitalstation. Feindliche Truppen haben die Ringe besetzt."},
-    3: {"name": "ASTEROIDENGUERTEL",
-        "story": "Verdeckte Feindbasis zwischen den Felsen. Vorsicht: Hinterhalte."},
-    4: {"name": "MARS",
-        "story": "Kolonie-Kaime auf dem roten Planeten. Die Bergungswerke werden angegriffen."},
-    5: {"name": "DUNKLER SEKTOR",
-        "story": "Quelle der Invasion. Hier steht das Herz der Feindflotte."},
-    # AUFTRAG 19 (PUNKT 2): Kampagnen-Erweiterung - die drei neuen
-    # Sektoren hinter dem Dunklen Sektor (gleiche 15-Stufen-Struktur,
-    # eigene Boss-Belegung siehe pve_system.BOSS_SECTOR_DATA, eigene
-    # Gegner-Paarungen automatisch durch den Spawn-Seed mit campaign_id).
-    6: {"name": "DER RISS",
-        "story": "Der Sprung durch den Riss ist gelungen. Dahinter koordinierte Flotten - kein wildes Chaos mehr."},
-    7: {"name": "NEBELKERN",
-        "story": "Ein Sternennebel voller Werft-Schleusen. Hier baut der Feind seine Schiffe."},
-    8: {"name": "KERNWELT",
-        "story": "Das Herz des Feindreichs. Hinter dem Kern steht nichts mehr - bring die Flotte nach Hause."},
+    sector: {"name": profile["name"], "story": profile["story"]}
+    for sector, profile in campaign_system.PLANETS.items()
 }
 
 
@@ -2520,6 +2503,9 @@ class Game:
         self.settings_return_state = self.MENU
 
         self.selected_sector = 0
+        self.campaign_track = "planet"
+        self.active_ship_id = "fortress"
+        self.active_ship_mission_id = None
         self.message = ""
         self.message_timer = 0.0
 
@@ -3498,6 +3484,10 @@ class Game:
                         stage_id=self.pve.stage_id,
                         credits_earned=result["credits_earned"]
                     )
+                    if self.active_ship_mission_id:
+                        self.modules.complete_ship_mission(
+                            self.active_ship_id, self.active_ship_mission_id)
+                        self.active_ship_mission_id = None
                     # PAKET 8: Spieler-XP + Quest-Fortschritt fuer Missionsende
                     self.last_xp_gain = rpg_config.campaign_xp(
                         self.pve.stage_id, bool(getattr(self.pve, "is_repeat", False)))
@@ -3667,7 +3657,11 @@ class Game:
             return
 
         if st == self.STAGES:
-            if bid == "stg_back":
+            if bid == "map_track":
+                self.campaign_track = "ship" if self.campaign_track == "planet" else "planet"
+                self.selected_sector = 0
+                self._map_deselect()
+            elif bid == "stg_back":
                 self.state = self.MENU
                 self._map_deselect()
                 self.selected_sector = 0
@@ -3692,6 +3686,9 @@ class Game:
                 # PAKET 7F: Kampfstart ueber den BEKANNTEN Pfad (_map_action)
                 self._map_action()
             elif bid == "map_second":
+                if self.campaign_track == "ship":
+                    self.campaign_track = "planet"
+                    return
                 oid = self.map_sel
                 if oid and oid.startswith("sector_"):
                     sec = int(oid.split("_")[1])
@@ -3868,7 +3865,7 @@ class Game:
             # unveraendert weiter - der Fehler wird jetzt aber sichtbar.
             _log.warning("Upgrade-Animation fehlgeschlagen (%s): %s", key, e)
 
-    def _try_enter_stage(self, stage):
+    def _try_enter_stage(self, stage, ship_mission_id=None):
         sector = self.selected_sector
         unlocked = (sector < self.modules.highest_campaign or
                     (sector == self.modules.highest_campaign and stage <= self.modules.highest_stage))
@@ -3883,6 +3880,7 @@ class Game:
             self.pve = PvECombat(is_idle=False, campaign_id=sector, stage_id=stage,
                                  ship_level=self.modules.ship_level, is_repeat=repeat,
                                  ng_plus=int(getattr(self.modules, "ng_plus", 0)))
+            self.active_ship_mission_id = ship_mission_id
             self._sync_modules_to_combat()
             self.quests.begin_mission()   # PAKET 8: Mission startet 'clean'
             self.state = self.PLAYING
@@ -3913,6 +3911,9 @@ class Game:
             return
         if oid.startswith("sector_"):
             sec = int(oid.split("_")[1])
+            if self.campaign_track == "ship":
+                self._map_action()
+                return
             if sec > self.modules.highest_campaign:
                 # Gleiche Sperr-FRUEHWARNUNG wie _map_action
                 self.show_message(
@@ -3945,6 +3946,24 @@ class Game:
         mods = self.modules
         if oid.startswith("sector_"):
             sec = int(oid.split("_")[1])
+            if self.campaign_track == "ship":
+                mission = campaign_system.next_ship_mission(
+                    mods.ship_campaign_progress, self.active_ship_id)
+                if mission is None:
+                    self.show_message("SCHIFFSKAMPAGNE ABGESCHLOSSEN")
+                    return
+                if sec != mission["planet"]:
+                    target = campaign_system.planet_profile(mission["planet"])
+                    self.show_message(f"NÄCHSTE SCHIFFSMISSION: {target['name']}")
+                    return
+                if mods.ship_hull_level < mission["hull"]:
+                    self.show_message(f"BENÖTIGT: SCHIFFSHÜLLE STUFE {mission['hull']}")
+                    return
+                self.selected_sector = sec
+                self._try_enter_stage(mission["stage"], ship_mission_id=mission["id"])
+                if self.state == self.PLAYING:
+                    self._map_deselect()
+                return
             if sec > mods.highest_campaign:
                 # A2: Sperr-FRUEHWARNUNG statt stiller Abbruch (Nutzer:
                 # "die Kampagnen sollten gesperrt sein. Sprich Erde
@@ -3973,6 +3992,9 @@ class Game:
         AUFTRAG 19: dynamisch ueber ALLE Sektoren (rpg_config.CAMPAIGN_COUNT)."""
         mods = self.modules
         states = {}
+        ship_mission = campaign_system.next_ship_mission(
+            mods.ship_campaign_progress, self.active_ship_id) \
+            if self.campaign_track == "ship" else None
         for sec in range(1, rpg_config.CAMPAIGN_COUNT + 1):
             done = sum(1 for (c, _s) in mods.completed_stages if c == sec)
             if sec in mods.completed_campaigns:
@@ -3989,6 +4011,15 @@ class Game:
                 "pulse": sec == mods.highest_campaign,
                 "progress": done / 15.0,
             }
+            if ship_mission and ship_mission["planet"] == sec:
+                ready = (mods.ship_hull_level >= ship_mission["hull"]
+                         and (sec < mods.highest_campaign or
+                              (sec == mods.highest_campaign
+                               and ship_mission["stage"] <= mods.highest_stage)))
+                states[f"sector_{sec}"].update(
+                    status="SCHIFFSMISSION" if ready else "SCHIFFSMISSION GESPERRT",
+                    status_col=CYAN if ready else MUTED,
+                    col=CYAN if ready else MUTED, pulse=ready)
         states["signal_a"] = {
             # PAKET 7D: Feindsignale = aktiver Feindverband im Kampagnen-Sektor
             "name": "FEINDSIGNALE",
@@ -4024,6 +4055,8 @@ class Game:
                 "tag": loc.get("kind", ""), "story": "", "battles": []}
         if oid.startswith("sector_"):
             sec = int(oid.split("_")[1])
+            if self.campaign_track == "ship":
+                return self._ship_campaign_panel_info(sec, st)
             done = int(round((st.get("progress") or 0.0) * 15))
             info["progress_text"] = f"{done}/15 STUFEN"
             # PAKET 7D: Story-Zeile des Sektors (Kampagnen-Bezug)
@@ -4083,6 +4116,58 @@ class Game:
                 info["lines"] = [f"Erreiche Stufe 15 in Sektor {mods.highest_campaign}"]
                 info["battles"] = [{"label": "BOSS \u00b7 STUFE 15",
                                     "note": "GESPERRT", "col": MUTED}]
+        return info
+
+    def _ship_campaign_panel_info(self, planet_id, planet_state):
+        """Render the selected planet as a mission node in the active hull track."""
+        profile = campaign_system.ship_profile(self.active_ship_id) or {}
+        missions = profile.get("missions", ())
+        completed = self.modules.ship_campaign_progress.get(self.active_ship_id, [])
+        mission = campaign_system.next_ship_mission(
+            self.modules.ship_campaign_progress, self.active_ship_id)
+        info = {
+            "title": profile.get("name", "SCHIFFSKAMPAGNE"),
+            "accent": CYAN, "status": "SCHIFFSKAMPAGNE",
+            "status_col": CYAN, "progress": None,
+            "progress_text": f"{min(len(completed), len(missions))}/{len(missions)} MISSIONEN",
+            "lines": [profile.get("trait", "")], "primary": None,
+            "second": ("PLANETENKAMPAGNE", VIOLET, True),
+            "hint": None, "tag": "EIGENE SCHIFFSPROGRESSION",
+            "story": "", "battles": [],
+        }
+        if mission is None:
+            info.update(status="REIHE ABGESCHLOSSEN", status_col=GREEN,
+                        accent=GREEN, story="Alle Schiffskampagnen-Missionen sind abgeschlossen.",
+                        lines=["Planetfortschritt und Schiffserfolge bleiben getrennt."],
+                        battles=[{"label": "ALLE MISSIONEN", "note": "GESCHAFFT", "col": GREEN}])
+            return info
+
+        mission_planet = campaign_system.planet_profile(mission["planet"])
+        info["title"] = mission["title"] if mission["planet"] == planet_id else profile.get("name", "SCHIFFSKAMPAGNE")
+        info["story"] = mission["objective"]
+        info["battles"] = [{"label": mission["title"],
+                            "note": f"{mission_planet['name']} · STUFE {mission['stage']}",
+                            "col": CYAN}]
+        if mission["planet"] != planet_id:
+            info["status"] = "NÄCHSTER EINSATZ"
+            info["status_col"] = MUTED
+            info["lines"] = [f"Nächste Station: {mission_planet['name']}",
+                             f"Hülle {mission['hull']} erforderlich"]
+            return info
+
+        self_planet_unlocked = (mission["planet"] < self.modules.highest_campaign or
+                                (mission["planet"] == self.modules.highest_campaign and
+                                 mission["stage"] <= self.modules.highest_stage))
+        hull_ready = self.modules.ship_hull_level >= mission["hull"]
+        enabled = self_planet_unlocked and hull_ready
+        info["tag"] = f"SCHIFF · {self.active_ship_id.upper()}"
+        info["status"] = "MISSION BEREIT" if enabled else "VORAUSSETZUNGEN FEHLEN"
+        info["status_col"] = CYAN if enabled else MUTED
+        info["primary"] = ("SCHIFFSMISSION STARTEN", CYAN, enabled)
+        info["hint"] = "EINSATZ ÜBER DEN PLANETEN STARTEN"
+        info["lines"] = [f"Hülle {self.modules.ship_hull_level}/{mission['hull']} erforderlich",
+                         ("Planetmission freigeschaltet" if self_planet_unlocked
+                          else f"Schließe Planet {mission['planet'] - 1} bis Stufe 15 ab")]
         return info
 
     def _toggle_fullscreen(self):
@@ -4414,6 +4499,14 @@ class Game:
                    else self.gmap.button_rects())
             for rid, rr in src.items():
                 ui[rid] = Btn(rid, rr, accent=CYAN)
+            if not self.map_scene.active:
+                tw, th = min(u(250), W - u(110)), compact_btn_h()
+                ui["map_track"] = Btn(
+                    "map_track",
+                    pygame.Rect((W - tw) // 2, margin(), tw, th),
+                    "PLANETEN" if self.campaign_track == "planet"
+                    else "FORTRESS · SCHIFF", "KAMPAGNENPFAD",
+                    CYAN if self.campaign_track == "planet" else VIOLET)
         return ui
 
     def _nex_area(self):
@@ -5007,9 +5100,9 @@ class Game:
         self._ui = self._layout_stages()
         draw_compact_icon_btn(SCREEN, self._ui["stg_back"], pressed=self._pressed("stg_back"))
         draw_compact_icon_btn(SCREEN, self._ui["snd_stg"], pressed=self._pressed("snd_stg"))
-        # PAKET 7D: Karte = Kampagne (Story-Bezug im Titel)
-        neon_text(SCREEN, "KAMPAGNE", F(12), ICE,
-                  (W // 2, margin() + icon_touch() // 2), "center", 1)
+        if "map_track" in self._ui:
+            draw_compact_btn(SCREEN, self._ui["map_track"],
+                             pressed=self._pressed("map_track"))
         if self.selected_sector > 0:
             overlay(SCREEN, 110)
             rect = self._stage_sheet_rect

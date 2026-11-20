@@ -9,10 +9,9 @@ Prueft mit lauffaehigen Assertions, dass die Kampagnen-Erweiterung
       ein Kartenobjekt + Name + Story).
   K2  Karte kollisionsfrei: Abstand je Objektpaar > Summe der Radien
       + Touch-Puffer (bei Referenz-Groesse 1920x1080).
-  K3  Boss-Zuordnung: Sektor 1-5 liefern exakt die historische
-      BOSS_DATA-Belegung (UNVERAENDERT, byte-gleiche Werte), Sektor
-      6-8 ihre eigene; Nicht-Boss-Stufen -> None; alle Typen besitzen
-      eingebundene Boss-Idle-Sheets.
+  K3  Boss-Zuordnung: alle acht Planeten liefern eigene Belegungen fuer
+      Stufe 5/10/15; jedes Finale hat einen anderen Archetypen; alle Typen
+      besitzen ein eingebundenes Boss-Sprite oder Animations-Sheet.
   K4  Skalierungskette: CAMPAIGN_*_MULT fuer 1-8 monoton ansteigend
       (HP/DMG/Beute) bzw. absteigend (Spawn-Intervall) und die
       Nicht-1-Sektoren sind in den Dicts vorhanden (kein Fallback-1.0
@@ -46,7 +45,9 @@ os.environ["CS_DATA_DIR"] = _check_data_dir.name
 
 import rpg_config as rc                                   # noqa: E402
 import pve_system as pve                                  # noqa: E402
+import campaign_system                                    # noqa: E402
 import world_map                                          # noqa: E402
+import map_locations                                      # noqa: E402
 import module_system as mods                              # noqa: E402
 
 mods.SAVE_PATH = Path(_check_data_dir.name) / "save.json"
@@ -86,50 +87,39 @@ def main():
                 f"Karten-Kollision {a}<->{b}: {dist:.0f}px <= {need:.0f}px"
     print("  K2 OK   10 Kartenobjekte kollisionsfrei (inkl. Touch-Puffer)")
 
-    # --- K3: Boss-Zuordnung (EINE Quelle, Sektor 1-5 unveraendert) ----------
-    hist = {
-        5: ("interceptor", "TARNJÄGER", 950, 0.10, 24, 200),
-        10: ("brute", "SCHLACHTSCHIFF", 1500, 0.15, 26, 400),
-        15: ("dragon", "EISDRACHE", 700, 0.20, 26, 750),
-    }
-    for sec in range(1, 6):
-        for st, (typ, name, bhp, dr, dmg, rew) in hist.items():
-            cfg = pve.boss_cfg_for(sec, st)
-            assert cfg is pve.BOSS_DATA[st], \
-                f"Sektor {sec} Stufe {st} muss die historische Tabelle nutzen"
-            assert (cfg["type"], cfg["name"], cfg["base_hp"], cfg["dr"],
-                    cfg["damage"], cfg["reward"]) == (typ, name, bhp, dr, dmg, rew), \
-                f"Boss Sektor {sec} Stufe {st} veraendert!"
+    # --- K3: Planetenspezifische Bosse auf allen drei Bossstufen ------------
     assert abs(pve.boss_stats_for_stage(15, 5)[0] - 29859.53) < 1.0, \
         "Sektor-5-Finale muss bei ~29.860 HP bleiben (Referenzwert)"
     assert abs(pve.boss_stats_for_stage(15, 1)[0] - 10477.03) < 1.0, \
         "Sektor-1-Finale (Stufe 15) muss bei ~10.477 HP bleiben"
-    for sec in (6, 7, 8):
+    final_types = set()
+    for sec in range(1, 9):
         for st in (5, 10, 15):
             cfg = pve.boss_cfg_for(sec, st)
-            assert cfg is pve.BOSS_SECTOR_DATA[sec][st]
+            assert cfg["type"] == campaign_system.boss_type_for(sec, st)
             assert cfg["type"] in BOSS_TYPS, f"Unbekannter Boss-Typ {cfg['type']}"
+            if st == 15:
+                final_types.add(cfg["type"])
             visual_type = cfg.get("phase_type", cfg["type"])
             try:
                 import main as game_main
             except ImportError:
                 from . import main as game_main
-            folder, filename = game_main.BOSS_IDLE_SHEETS[visual_type]
-            png = os.path.join("enemys", folder, filename)
-            assert os.path.exists(png), f"Boss-Grafik fehlt: {png}"
+            if visual_type == "dragon":
+                assert len(game_main.load_enemy_anim("dragon", "idle")) >= 2
+                png = None
+            elif visual_type in game_main.BOSS_IDLE_SHEETS:
+                folder, filename = game_main.BOSS_IDLE_SHEETS[visual_type]
+                png = os.path.join("enemys", folder, filename)
+            else:
+                png = os.path.join("enemys", f"enemy_{visual_type}.png")
+            if png:
+                assert os.path.exists(png), f"Boss-Grafik fehlt: {png}"
         assert pve.boss_cfg_for(sec, 1) is None, "Stufe 1 ist kein Boss"
         assert pve.boss_stats_for_stage(1, sec) is None
-    expected_bosses = {
-        (6, 5): "astral_centaur", (6, 10): "colossal_armadillo",
-        (6, 15): "corrupted_gryphon", (7, 5): "dreadmaw_behemoth",
-        (7, 10): "obsidian_mantis", (7, 15): "primordial_serpent",
-        (8, 5): "shadow_weave", (8, 10): "spire_walker",
-        (8, 15): "void_lurker",
-    }
-    for key, kind in expected_bosses.items():
-        assert pve.boss_cfg_for(*key)["type"] == kind
-    print("  K3 OK   Sektor 1-5 historische Bosse byte-gleich, 6-8 eigene "
-          "Belegung (vorhandene Typen + PNGs)")
+    assert len(final_types) == 8, "Jede Planetenkampagne braucht ein eigenes Finale"
+    assert set(map_locations.LOCATIONS) == {obj["id"] for obj in world_map.OBJECTS}
+    print("  K3 OK   8 individuelle Bossaufstellungen + finale Typen, vorhandene PNGs")
 
     # --- K4: Skalierungskette monotone Steigerung ---------------------------
     hp, dm, rw, sp = (rc.CAMPAIGN_HP_MULT, rc.CAMPAIGN_DMG_MULT,

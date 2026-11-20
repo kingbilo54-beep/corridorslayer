@@ -338,6 +338,8 @@ class GalaxyMap:
             r = g["r"]
             if o["id"] == self.selected:
                 pass                   # Auswahl: statischer Ring entfaellt
+            elif o["kind"] == "sector":
+                pass                   # Planet-Auswahl: animierter Aussenring in draw()
             # feiner Statusring (immer sichtbar, sehr zurueckhaltend)
             elif o["shape"] == "circle":
                 pygame.draw.circle(lay, (*_scaled_c(col, 0.65), 110), (g["cx"], g["cy"]), r, 1)
@@ -776,22 +778,32 @@ class GalaxyMap:
             self._sel_geo = self._draw_lift(surface, o, geo[self.selected],
                                             col, elapsed)
 
-        # langsamer Puls NUR fuer erreichbare Ziele (gestaffelte Phasen)
-        for o in OBJECTS:
-            if o["id"] == self.selected:
-                continue               # Auswahl: Highlight sitzt oben
+        # Planet states use broken outer-rim arcs around the planet image;
+        # no center marker or small selection dot covers the clickable world.
+        for index, o in enumerate(OBJECTS):
+            if o["kind"] != "sector" or o["id"] == self.selected:
+                continue
+            g = geo[o["id"]]
             st = states.get(o["id"], {})
-            if st.get("pulse"):
-                g = geo[o["id"]]
-                k = pulse(elapsed, 3.4, hash(o["id"]) % 7 * 0.55)
-                rr = g["r"] + u(3) + int(u(3) * k)
-                col = st.get("col") or DEFAULT_COLOR[o["kind"]]
-                pygame.draw.circle(surface, _scaled_c(col, 0.35 + 0.3 * k),
-                                   (g["cx"], g["cy"]), rr, 1)
-                if k > 0.72:
-                    glow = radial_glow(_scaled_c(col, 0.4), int(g["r"] * 1.7))
-                    surface.blit(glow, glow.get_rect(center=(g["cx"], g["cy"])),
-                                 special_flags=pygame.BLEND_ADD)
+            status = st.get("status", "GESPERRT")
+            col = st.get("col") or DEFAULT_COLOR[o["kind"]]
+            rr = max(g["r"] + u(5), int(min(self._lift_radius(o, g) * .9,
+                                             ui_kit.H * .44)))
+            rect = pygame.Rect(g["hcx"] - rr, g["hcy"] - rr, rr * 2, rr * 2)
+            active = status in ("AKTIV", "SCHIFFSMISSION")
+            done = status == "ABGESCHLOSSEN"
+            k = pulse(elapsed, 3.2, index * .43) if active else 0.0
+            ring_col = (_scaled_c(col, .38 + .34 * k) if active else
+                        _scaled_c(GREEN, .72) if done else _scaled_c(MUTED, .42))
+            width = max(1, u(2) if active else 1)
+            phase = elapsed * (.22 if active else 0.0) + index * .73
+            for seg in range(4):
+                start = phase + seg * math.pi / 2
+                pygame.draw.arc(surface, ring_col, rect, start, start + .72, width)
+            if active and k > .78:
+                glow = radial_glow(_scaled_c(col, .28), max(6, int(rr * .42)))
+                surface.blit(glow, glow.get_rect(center=(g["hcx"], g["hcy"])),
+                             special_flags=pygame.BLEND_ADD)
 
         # Auswahl-Highlight (formfitting, folgt der ANGEBHOBENEN Flaeche)
         if self.selected and self.selected in geo:

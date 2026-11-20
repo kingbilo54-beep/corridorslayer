@@ -6,6 +6,7 @@ import os
 from pathlib import Path   # SCHRITT 1c: Excel-Pfad unabhaengig vom Arbeitsordner
 from dataclasses import dataclass
 from sound_system import SFX
+import campaign_system
 # SCHRITT 3: Globale BAL_*-Koeffizienten liegen zentral im BALANCE-Block
 # von rpg_config.py und werden nur noch importiert (Werte identisch).
 from rpg_config import (BAL_PLAYER_DMG, BAL_PLAYER_RATE, BAL_PLAYER_HP,
@@ -533,16 +534,37 @@ BOSS_SECTOR_DATA = {
 
 
 def boss_cfg_for(campaign_id, stage_id):
-    """EINE Quelle fuer die Boss-Belegung (AUFTRAG 19): Sektor 1-5 nutzt
-    die historische Tabelle BOSS_DATA (unveraendert), Sektor 6-8 ihre
-    eigene Tabelle BOSS_SECTOR_DATA. Nicht-Boss-Stufen -> None. Alle
-    Leser (pve_system, main, Simulatoren) rufen DIESE Funktion - nie
-    BOSS_DATA direkt."""
+    """Resolve the planet's boss archetype while retaining its tuned stats."""
     st = int(stage_id)
-    sec = BOSS_SECTOR_DATA.get(max(1, int(campaign_id)))
-    if sec and st in sec:
-        return sec[st]
-    return BOSS_DATA.get(st)
+    campaign = max(1, int(campaign_id))
+    sec = BOSS_SECTOR_DATA.get(campaign)
+    base = sec.get(st) if sec and st in sec else BOSS_DATA.get(st)
+    if not base:
+        return base
+    assigned_type = campaign_system.boss_type_for(campaign, st)
+    if not assigned_type or assigned_type == base["type"]:
+        return base
+    labels = {
+        "astral_centaur": "ASTRALKENTAUR", "colossal_armadillo": "KOLLOSS-PANZER",
+        "corrupted_gryphon": "KORRUPTER GREIF", "dreadmaw_behemoth": "DREADMAW",
+        "obsidian_mantis": "OBSIDIANMANTIS", "primordial_serpent": "UR-SERPENT",
+        "shadow_weave": "SCHATTENWEBER", "spire_walker": "TURMWANDLER",
+        "void_lurker": "LEERENHERRSCHER", "dragon": "EISDRACHE",
+    }
+    tuned = dict(base)
+    tuned.update(type=assigned_type, name=labels.get(assigned_type, assigned_type.upper()),
+                 col=ENEMY_FX_COL.get(assigned_type, base["col"]))
+    tuned["dr"] = {"interceptor": .10, "brute": .15, "astral_centaur": .17, "colossal_armadillo": .31,
+                   "corrupted_gryphon": .12, "dreadmaw_behemoth": .24,
+                   "obsidian_mantis": .19, "primordial_serpent": .22,
+                   "shadow_weave": .15, "spire_walker": .33,
+                   "void_lurker": .28, "dragon": .20}.get(assigned_type, base["dr"])
+    tuned["speed"] = {"interceptor": 24, "brute": 26, "astral_centaur": 34, "colossal_armadillo": 22,
+                      "corrupted_gryphon": 40, "dreadmaw_behemoth": 24,
+                      "obsidian_mantis": 37, "primordial_serpent": 29,
+                      "shadow_weave": 35, "spire_walker": 21,
+                      "void_lurker": 29, "dragon": 30}.get(assigned_type, base["speed"])
+    return tuned
 
 # PAKET 8.8a: TREFFERRADIUS der Bosse. Die Bosse sind fuer die Praesenz
 # deutlich groesser gezeichnet (ENEMY_IMG_W in main.py: 150/195/235) -
@@ -698,7 +720,10 @@ def campaign_dmg_mult(campaign_id):
 
 
 def campaign_reward_mult(campaign_id):
-    return float(CAMPAIGN_REWARD_MULT.get(max(1, int(campaign_id)), 1.0))
+    campaign = max(1, int(campaign_id))
+    profile = campaign_system.planet_profile(campaign)
+    return float(CAMPAIGN_REWARD_MULT.get(campaign, 1.0)) * float(
+        profile.get("reward_profile", 1.0) if profile else 1.0)
 
 
 def campaign_spawn_mult(campaign_id):
@@ -1241,9 +1266,11 @@ class PvECombat:
         else:
             available_enemies = []
             weights = []
+            planet = campaign_system.planet_profile(self.campaign_id) or {}
+            planet_roster = set(planet.get("roster", ()))
             for k, data in ENEMY_DATA.items():
                 min_lvl = int(data.get("Min_Ship_Level", 1))
-                if self.ship_level >= min_lvl:
+                if (not planet_roster or k in planet_roster) and self.ship_level >= min_lvl:
                     img_path = os.path.join(ENEMY_FOLDER, f"enemy_{k}.png")
                     if os.path.exists(img_path):
                         available_enemies.append(k)

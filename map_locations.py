@@ -84,6 +84,26 @@ LOCATIONS = {
         "fx": {"dust": (34, (200, 180, 255)), "fog": ((120, 50, 220), 5, 0.42),
                "lightning": (2.6, 3), "movers": (2, (170, 120, 255))},
     },
+    "sector_6": {
+        "kind": "RISS", "sector": 6, "name": "DER RISS",
+        "scene": "loc_riss.jpg", "accent": (100, 190, 255),
+        "fx": {"dust": (75, (150, 205, 255)), "fog": ((45, 100, 230), 4, 0.34),
+               "lightning": (3.0, 2), "movers": (3, (120, 205, 255))},
+    },
+    "sector_7": {
+        "kind": "NEBELKERN", "sector": 7, "name": "NEBELKERN",
+        "scene": "loc_nebelkern.jpg", "accent": (180, 125, 255),
+        "fx": {"dust": (95, (205, 175, 255)), "fog": ((130, 60, 225), 5, 0.38),
+               "sweep": ((175, 110, 255), 0.55, 0.38),
+               "movers": (4, (190, 145, 255))},
+    },
+    "sector_8": {
+        "kind": "PLANET", "sector": 8, "name": "KERNWELT",
+        "scene": "loc_kernwelt.jpg", "accent": (100, 225, 200),
+        "fx": {"dust": (85, (155, 245, 220)), "fog": ((30, 155, 130), 4, 0.32),
+               "embers": 24, "lights": [(0.22, 0.65), (0.36, 0.72),
+                                          (0.58, 0.62), (0.73, 0.75)]},
+    },
     "signal_a": {
         "kind": "SIGNAL", "sector": 0, "name": "FEINDSIGNALE",
         "scene": "loc_feindsignale.jpg", "accent": (70, 230, 140),
