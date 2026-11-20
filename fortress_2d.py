@@ -17,7 +17,9 @@ class Fortress:
         self.level = 1
         self._base_image = None
 
-        self.image_folder = "fortress"
+        self.image_folder = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "fortress"
+        )
         # Für 960x540 Querformat
         self.target_width = 160
 

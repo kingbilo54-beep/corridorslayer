@@ -39,11 +39,14 @@ from pathlib import Path
 import json
 import time
 import openpyxl
+import logging
 # SCHRITT 3: Preisbremse BAL_COST_MULT liegt zentral im BALANCE-Block
 # von rpg_config.py und wird nur noch importiert (Wert identisch).
 from rpg_config import BAL_COST_MULT
+from save_store import data_file, legacy_file, read_json, write_json
 
-SAVE_PATH = Path(__file__).with_name("corridor_slayer_modules.json")
+SAVE_PATH = data_file("corridor_slayer_modules.json")
+_SAVE_LOG = logging.getLogger("corridor_slayer.save")
 
 # PAKET 7E: Schiffs-Rumpf (das Schiff SELBST) - Stufe 1-12.
 SHIP_MAX_LEVEL = 12
@@ -142,6 +145,8 @@ class FortressModules:
     cost_discount: float = 0.0
 
     def __post_init__(self):
+        self.save_error = None
+        self.load_error = None
         self.offline_seconds = 0.0
         # PAKET 8.6: saved_at des VORHERIGEN Programmlaufs. main.py liest
         # das beim Start, um das Offline-Einkommen (Idle-Bericht) zu
@@ -264,8 +269,13 @@ class FortressModules:
         self.save()
 
     def load(self):
+        self.load_error = None
         try:
-            data = json.loads(SAVE_PATH.read_text(encoding="utf-8"))
+            data = read_json(SAVE_PATH, legacy_file("corridor_slayer_modules.json"))
+            if data is None:
+                return
+            if not isinstance(data, dict):
+                raise ValueError("Der Spielstand muss ein JSON-Objekt enthalten.")
             self.credits = max(0, int(data.get("credits", self.credits)))
             self.data_cores = max(0, int(data.get("data_cores", 0)))
             self.highest_campaign = max(1, int(data.get("highest_campaign", 1)))
@@ -308,10 +318,12 @@ class FortressModules:
                 self.idle_window_start = 0.0
                 self.idle_session_used_s = 0.0
                 self.idle_live_cores_used = 0
-        except (OSError, ValueError, TypeError, json.JSONDecodeError):
-            pass
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            self.load_error = str(exc)
+            _SAVE_LOG.exception("Spielstand konnte nicht geladen werden")
 
     def save(self):
+        self.save_error = None
         try:
             payload = {
                 "credits": int(self.credits),
@@ -333,9 +345,12 @@ class FortressModules:
             # PAKET 8: RPG-Block anhaengen, sobald die Systeme leben.
             if self.rpg_ref is not None:
                 payload["rpg"] = self.rpg_ref.serialize()
-            SAVE_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        except OSError:
-            pass
+            write_json(SAVE_PATH, payload)
+            return True
+        except (OSError, TypeError, ValueError) as exc:
+            self.save_error = str(exc)
+            _SAVE_LOG.exception("Spielstand konnte nicht gespeichert werden")
+            return False
 
 
 # ----------------------------------------------------------------------

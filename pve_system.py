@@ -349,17 +349,52 @@ BOSS_DATA = {
 #   b_speed  : Projektil-Tempo (normal: 250)
 #   heavy    : jeder 3. Salve zusaetzlich ein SCHWERER gezielter Schuss
 BOSS_TYPE_CFG = {
-    "interceptor": {"fan": 3, "spread": 26.0, "cadence": (1.15, 1.6),
-                    "b_speed": 290.0, "size": 6, "heavy": False},
+    "interceptor": {"pattern": "fan", "fan": 3, "spread": 26.0,
+                    "cadence": (1.15, 1.6), "b_speed": 290.0,
+                    "size": 6, "heavy": False,
+                    "extra_attacks": (3,), "attack_range": 720.0},
     # AUFTRAG 16b: SCHLACHTSCHIFF/EISDRACHE - Salvenpausen vergroessert
     # (vorher 1.5-2.1 / 1.5-2.0). Grund: im passiven Ausweich-Modell lag
     # die erlittene Dauerlast knapp ueber der Ueberlebenszeit von
     # Schiff-4-Profilen; mit laengeren Pausen gewinnt Reaktivieren
     # (Reparatur-Drohnen) die Kante zurueck, das Angriffsmuster bleibt.
-    "brute":        {"fan": 5, "spread": 55.0, "cadence": (1.9, 2.6),
-                     "b_speed": 265.0, "size": 7, "heavy": True},
-    "dragon":       {"fan": 5, "spread": 60.0, "cadence": (1.9, 2.5),
-                     "b_speed": 275.0, "size": 7, "heavy": True},
+    "brute":        {"pattern": "fan", "fan": 5, "spread": 55.0,
+                     "cadence": (1.9, 2.6), "b_speed": 265.0,
+                     "size": 7, "heavy": True,
+                     "extra_attacks": (2,), "attack_range": 720.0},
+    "dragon":       {"pattern": "fan", "fan": 5, "spread": 60.0,
+                     "cadence": (1.9, 2.5), "b_speed": 275.0,
+                     "size": 7, "heavy": True,
+                     "extra_attacks": (2, 3), "attack_range": 760.0},
+    # Neue Boss-Archetypen: jeder verwendet ein eigenes Projektilmuster,
+    # Tempo und Zusatzangriff. Die drei Legacy-Archetypen bleiben erhalten.
+    "astral_centaur": {"pattern": "fan", "fan": 4, "spread": 34.0,
+        "cadence": (1.7, 2.2), "b_speed": 260.0, "size": 6,
+        "heavy": False, "extra_attacks": (), "attack_range": 700.0},
+    "colossal_armadillo": {"pattern": "aimed", "fan": 1, "spread": 12.0,
+        "cadence": (2.5, 3.2), "b_speed": 205.0, "size": 11,
+        "heavy": True, "extra_attacks": (3,), "attack_range": 620.0},
+    "corrupted_gryphon": {"pattern": "fan", "fan": 3, "spread": 22.0,
+        "cadence": (1.05, 1.45), "b_speed": 330.0, "size": 5,
+        "heavy": True, "extra_attacks": (), "attack_range": 720.0},
+    "dreadmaw_behemoth": {"pattern": "fan", "fan": 7, "spread": 68.0,
+        "cadence": (2.4, 3.0), "b_speed": 220.0, "size": 8,
+        "heavy": True, "extra_attacks": (2,), "attack_range": 680.0},
+    "obsidian_mantis": {"pattern": "cross", "fan": 4, "spread": 90.0,
+        "cadence": (1.8, 2.4), "b_speed": 300.0, "size": 6,
+        "heavy": False, "extra_attacks": (3,), "attack_range": 700.0},
+    "primordial_serpent": {"pattern": "wave", "fan": 5, "spread": 52.0,
+        "cadence": (1.45, 1.95), "b_speed": 250.0, "size": 6,
+        "heavy": False, "extra_attacks": (), "attack_range": 740.0},
+    "shadow_weave": {"pattern": "spiral", "fan": 6, "spread": 360.0,
+        "cadence": (1.65, 2.1), "b_speed": 275.0, "size": 5,
+        "heavy": False, "extra_attacks": (3,), "attack_range": 680.0},
+    "spire_walker": {"pattern": "aimed", "fan": 1, "spread": 8.0,
+        "cadence": (2.8, 3.5), "b_speed": 185.0, "size": 12,
+        "heavy": True, "extra_attacks": (3,), "attack_range": 640.0},
+    "void_lurker": {"pattern": "radial", "fan": 8, "spread": 360.0,
+        "cadence": (2.25, 2.8), "b_speed": 235.0, "size": 6,
+        "heavy": False, "extra_attacks": (2,), "attack_range": 720.0},
 }
 
 # AUFTRAG 19 (PUNKT 2): Eigenstaendige Boss-Belegung der SEKTOREN 6-8.
@@ -379,37 +414,38 @@ BOSS_TYPE_CFG = {
 #                            St15 KERNHERRSCHER (gepanzertes Finale)
 BOSS_SECTOR_DATA = {
     6: {
-        5:  {"type": "interceptor", "name": "SPLITTERJÄGER",
-             "base_hp": 1150, "hp_mult": 1.18, "dr": 0.12, "speed": 34,
-             "damage": 26, "reward": 260, "col": (176, 120, 255)},
-        10: {"type": "brute", "name": "RINGKREUZER",
-             "base_hp": 750, "hp_mult": 1.18, "dr": 0.18, "speed": 26,
-             "damage": 30, "reward": 520, "col": (255, 80, 60)},
-        15: {"type": "dragon", "name": "ABYSSDRACHE",
-             "base_hp": 1100, "hp_mult": 1.18, "dr": 0.24, "speed": 30,
-             "damage": 30, "reward": 950, "col": (130, 225, 255)},
+        5:  {"type": "astral_centaur", "name": "ASTRALKENTAUR",
+             "base_hp": 1050, "hp_mult": 1.18, "dr": 0.12, "speed": 30,
+             "damage": 28, "reward": 300, "col": (110, 190, 255)},
+        10: {"type": "colossal_armadillo", "name": "KOLLOSS-PANZER",
+             "base_hp": 850, "hp_mult": 1.18, "dr": 0.22, "speed": 21,
+             "damage": 34, "reward": 620, "col": (180, 210, 110)},
+        15: {"type": "corrupted_gryphon", "name": "KORRUPTER GREIF",
+             "base_hp": 900, "hp_mult": 1.18, "dr": 0.24, "speed": 38,
+             "damage": 34, "reward": 1100, "col": (190, 110, 245)},
     },
     7: {
-        5:  {"type": "brute", "name": "NEBELBOLLWERK",
-             "base_hp": 900, "hp_mult": 1.18, "dr": 0.14, "speed": 26,
-             "damage": 28, "reward": 320, "col": (255, 80, 60)},
-        10: {"type": "dragon", "name": "NEBELDRACHE",
-             "base_hp": 650, "hp_mult": 1.18, "dr": 0.20, "speed": 30,
-             "damage": 32, "reward": 640, "col": (130, 225, 255)},
-        15: {"type": "interceptor", "name": "SPLITTERKÖNIG",
-             "base_hp": 950, "hp_mult": 1.18, "dr": 0.26, "speed": 34,
-             "damage": 34, "reward": 1200, "col": (176, 120, 255)},
+        5:  {"type": "dreadmaw_behemoth", "name": "DREADMAW",
+             "base_hp": 1100, "hp_mult": 1.18, "dr": 0.16, "speed": 22,
+             "damage": 32, "reward": 380, "col": (220, 105, 65)},
+        10: {"type": "obsidian_mantis", "name": "OBSIDIANMANTIS",
+             "base_hp": 800, "hp_mult": 1.18, "dr": 0.22, "speed": 36,
+             "damage": 34, "reward": 720, "col": (190, 90, 130)},
+        15: {"type": "primordial_serpent", "name": "UR-SERPENT",
+             "base_hp": 1050, "hp_mult": 1.18, "dr": 0.25, "speed": 28,
+             "damage": 36, "reward": 1250, "col": (120, 220, 165)},
     },
     8: {
-        5:  {"type": "dragon", "name": "KERNBRUT",
-             "base_hp": 800, "hp_mult": 1.18, "dr": 0.16, "speed": 30,
-             "damage": 30, "reward": 400, "col": (130, 225, 255)},
-        10: {"type": "interceptor", "name": "SCHWARMHEROLD",
-             "base_hp": 550, "hp_mult": 1.18, "dr": 0.22, "speed": 34,
-             "damage": 34, "reward": 800, "col": (176, 120, 255)},
-        15: {"type": "brute", "name": "KERNHERRSCHER",
-             "base_hp": 800, "hp_mult": 1.18, "dr": 0.30, "speed": 26,
-             "damage": 38, "reward": 1600, "col": (255, 80, 60)},
+        5:  {"type": "shadow_weave", "name": "SCHATTENWEBER",
+             "base_hp": 850, "hp_mult": 1.18, "dr": 0.18, "speed": 34,
+             "damage": 35, "reward": 460, "col": (185, 120, 245)},
+        10: {"type": "spire_walker", "name": "TURMWANDLER",
+             "base_hp": 750, "hp_mult": 1.18, "dr": 0.24, "speed": 20,
+             "damage": 40, "reward": 900, "col": (255, 185, 85)},
+        15: {"type": "void_lurker", "phase_type": "lich_dragon",
+             "name": "LEERENHERRSCHER",
+             "base_hp": 950, "hp_mult": 1.18, "dr": 0.30, "speed": 28,
+             "damage": 42, "reward": 1700, "col": (140, 185, 255)},
     },
 }
 
@@ -437,7 +473,12 @@ def boss_cfg_for(campaign_id, stage_id):
 # AUFTRAG DRACHE-GROSS: Eisdrache 300 -> 460 in main.py (neue Idle-
 # Animation aus enemys/enemy_dragon/idle/). Trefferzone waechst
 # proportional mit: 75 -> 110 (gleiches Verhaeltnis zur Breite).
-BOSS_HIT_R = {"interceptor": 46, "brute": 54, "dragon": 110}
+BOSS_HIT_R = {"interceptor": 46, "brute": 54, "dragon": 110,
+              "astral_centaur": 80, "colossal_armadillo": 90,
+              "corrupted_gryphon": 82, "dreadmaw_behemoth": 100,
+              "obsidian_mantis": 84, "primordial_serpent": 105,
+              "shadow_weave": 84, "spire_walker": 84,
+              "void_lurker": 94, "lich_dragon": 105}
 
 # AUFTRAG RANGE-FIX (Nutzer: "die Range der Gegner sollte erhoeht
 # werden", "der Drache kommt nicht einmal zum angreifen", "der Strahl
@@ -502,7 +543,12 @@ BREATH_CD_RAGE = (1.7, 2.3) # ... in der Wut-Phase
 #                 (EISDRACHE + SCHLACHTSCHIFF).
 #   SPIKE_*     : EISSPIESSE - telegrafierte Eruptionen aus dem Untergrund
 #                 (EISDRACHE + TARNJAEGER).
-BOSS_HOLD_X = {"interceptor": 440.0, "brute": 445.0, "dragon": 640.0}
+BOSS_HOLD_X = {"interceptor": 440.0, "brute": 445.0, "dragon": 640.0,
+               "astral_centaur": 610.0, "colossal_armadillo": 620.0,
+               "corrupted_gryphon": 620.0, "dreadmaw_behemoth": 650.0,
+               "obsidian_mantis": 600.0, "primordial_serpent": 650.0,
+               "shadow_weave": 610.0, "spire_walker": 620.0,
+               "void_lurker": 630.0, "lich_dragon": 630.0}
 BOSS_MOVE_AMP = 55.0         # Haupt-Amplitude (px)
 BOSS_MOVE_AMP2 = 18.0        # Neben-Amplitude (Unregelmaessigkeit)
 BOSS_MOVE_SPD = 0.42         # rad/s -> ~15 s pro Haupt-Schwingung
@@ -683,6 +729,8 @@ class Enemy:
     base_y: float = 270.0      # Ruhelage der Vertikalbewegung
     move_phase: float = 0.0    # Phasenversatz der Sinuswellen
     mouth_open: bool = False   # Maul-Zustand (Drachen-Sprite offen/geschlossen)
+    visual_type: str = ""     # Boss-Phase kann eigenes Sprite verwenden
+    phase_visual: str = ""    # Sprite nach Erreichen der Rage-Phase
     # AUFTRAG 21: Typ-eigene Bewegung & Angriffsmuster (Normal-Gegner)
     mv_phase: float = 0.0      # Phasenversatz Bob/Sway (Random je Spawn)
     pattern: str = "shot"      # "shot" (klassisch) | "zigzag" | "dash" | "kamikaze" | "fan"
@@ -1169,6 +1217,8 @@ class PvECombat:
             e.dr = float(boss_cfg["dr"])
             e.boss_cd = 2.2               # kurze Schonfrist nach Einzug
             e.boss_col = boss_cfg["col"]
+            e.visual_type = e_type
+            e.phase_visual = str(boss_cfg.get("phase_type", ""))
             # PAKET 8.8c: Bewegungs-Ruhelage, Phasenversetzter Auf/Ab-Drift
             # und Start-Timer fuer die Zusatz-Angriffe.
             e.base_y = float(lane_y)
@@ -1201,13 +1251,23 @@ class PvECombat:
             return
         dx, dy = cx - e.x, cy - e.y
         base = math.atan2(dy, dx)
-        fan = cfg["fan"] + (2 if e.enraged else 0)
-        spread = cfg["spread"] + (14.0 if e.enraged else 0.0)
-        for i in range(fan):
-            if fan <= 1:
+        pattern = cfg.get("pattern", "fan")
+        count = cfg["fan"] + (2 if e.enraged and pattern == "fan" else 0)
+        spread = cfg["spread"] + (14.0 if e.enraged and pattern == "fan" else 0.0)
+        for i in range(count):
+            if pattern == "cross":
+                ang = base + (i % 4) * math.pi / 2
+            elif pattern in ("radial", "spiral"):
+                ang = (math.tau * i / count
+                       + (e.volley * 0.22 if pattern == "spiral" else base))
+            elif pattern == "wave":
+                ang = base + math.radians(spread) * (i / max(1, count - 1) - 0.5)
+                if i % 2:
+                    ang += math.radians(8.0)
+            elif count <= 1:
                 ang = base
             else:
-                ang = base + math.radians(spread) * (i / (fan - 1) - 0.5)
+                ang = base + math.radians(spread) * (i / (count - 1) - 0.5)
             self.projectiles.append(Projectile(
                 x=e.x, y=e.y, vx=math.cos(ang), vy=math.sin(ang),
                 damage=e.damage, color=e.boss_col, size=cfg["size"],
@@ -1433,12 +1493,13 @@ class PvECombat:
         # Maul-Zustand (Drache): offen bei Atem ODER laufendem Zusatz-Angriff
         e.mouth_open = getattr(e, "breath_phase", 0) > 0
         e.atk_cd -= dt
-        if e.atk_cd > 0 or dist > 640.0:
+        attack_range = BOSS_TYPE_CFG.get(e.enemy_type, {}).get(
+            "attack_range", ENEMY_ATTACK_RANGE)
+        if e.atk_cd > 0 or dist > attack_range:
             return
         if getattr(e, "breath_phase", 0) > 0:   # nicht mitten in den Atem hinein
             return
-        menu = {"dragon": [2, 3], "brute": [2],
-                "interceptor": [3]}.get(e.enemy_type)
+        menu = BOSS_TYPE_CFG.get(e.enemy_type, {}).get("extra_attacks", ())
         if not menu:
             return
         opts = [k for k in menu if k != e.last_atk] or menu
@@ -1614,6 +1675,15 @@ class PvECombat:
             e.hurt_t = max(0.0, e.hurt_t - dt)
 
             if e.is_boss:
+                if (not e.enraged and e.enemy_type != "dragon"
+                        and e.hp < e.max_hp * 0.5):
+                    e.enraged = True
+                    e.damage = int(e.damage * 1.15)
+                    e.speed += 8.0
+                    if e.phase_visual:
+                        e.visual_type = e.phase_visual
+                    self._spawn_damage(e.x, e.y - 46, "WUT!",
+                                       (130, 225, 255), big=True)
                 # RANGE-FIX: Bosse halten bei 440-445 - etwas weiter
                 # draussen als Normalgegner (400), aber INNERHALB der
                 # Zielrange 450, damit Schiff/Drohnen sie wie jeden
@@ -1686,7 +1756,10 @@ class PvECombat:
             # Bosse greifen jetzt schon im Anflug an - vorher starben
             # langsame Bosse (Speed 26-34) oft, bevor sie je in
             # Reichweite kamen ("der Drache kommt nicht zum angreifen").
-            if dist_to_ship < ENEMY_ATTACK_RANGE: 
+            attack_range = (BOSS_TYPE_CFG.get(e.enemy_type, {}).get(
+                "attack_range", ENEMY_ATTACK_RANGE) if e.is_boss
+                else ENEMY_ATTACK_RANGE)
+            if dist_to_ship < attack_range:
                 # PAKET 8.8: Bosse feuern Faecher-Salven (_boss_shoot),
                 # Normalgegner wie gehabt einen gezielten Schuss.
                 # PAKET 8.8b: Der EISDRACHE hat den FLAMMEN-ATEM statt

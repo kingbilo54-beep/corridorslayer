@@ -164,6 +164,7 @@ import rpg_config
 import rpg_progression
 import quest_system
 import summon_system
+from save_store import data_file, legacy_file, read_json, user_data_dir, write_json
 
 
 # =====================================================================
@@ -279,7 +280,7 @@ CANNON_OFFSETS = [(4, -14)]
 
 VERSION = "LANDSCAPE EDITION v8.7"
 _BASE = os.path.dirname(os.path.abspath(__file__))
-_PREFS_PATH = os.path.join(_BASE, "ui_prefs.json")
+_PREFS_PATH = data_file("ui_prefs.json")
 
 # ---------- Asset-Ordner: erst neben dieser Datei, dann alter Hartpfad ----------
 def _folder(name, old_abs):
@@ -299,7 +300,8 @@ def _folder(name, old_abs):
 _log = logging.getLogger("corridor_slayer")
 _log.setLevel(logging.WARNING)
 try:
-    _log_fh = logging.FileHandler(os.path.join(_BASE, "corridor_slayer.log"),
+    user_data_dir().mkdir(parents=True, exist_ok=True)
+    _log_fh = logging.FileHandler(str(data_file("corridor_slayer.log")),
                                   encoding="utf-8")
     _log_fh.setFormatter(logging.Formatter(
         "%(asctime)s  %(levelname)-7s %(message)s"))
@@ -357,7 +359,29 @@ ENEMY_IMG_W = {"skitter": 46, "shard": 50, "husk": 62, "wraith": 52,
                "hive": 78, "lancer": 112,
                "stalker": 68, "medusa": 64, "carrier": 110,
                "eye": 66, "crystal": 58,
-               "interceptor": 150, "brute": 195, "dragon": 460}
+               "interceptor": 150, "brute": 195, "dragon": 460,
+               "astral_centaur": 340, "colossal_armadillo": 350,
+               "corrupted_gryphon": 340, "dreadmaw_behemoth": 410,
+               "obsidian_mantis": 350, "primordial_serpent": 420,
+               "shadow_weave": 350, "spire_walker": 350,
+               "void_lurker": 390, "lich_dragon": 430}
+
+# Eigene idle-Sheets aus dem Repository. Diese zehn Bosse hatten Assets,
+# aber weder Spawn-Konfiguration noch einen Loader im normalen Spritepfad.
+# Die Verzeichnis-/Dateinamen sind hier explizit, einschließlich der beiden
+# historischen Schreibweisen im Assetbestand.
+BOSS_IDLE_SHEETS = {
+    "astral_centaur": ("enemy_astral_centaur", "boss_astral_centaur_idle_8frames_1024x420.png"),
+    "colossal_armadillo": ("enemy_colossal_armadillo", "boss_colossal_armadillo_turtle_idle_8frames_1024x420.png"),
+    "corrupted_gryphon": ("enemy_corrupted_gryphon", "boss_corrupted_gryphon_idle_8frames_1024x420.png"),
+    "dreadmaw_behemoth": ("enemy_dreadmaw_behemoth", "boss_dreadmaw_behemoth_idle_8frames_1024x420.png"),
+    "obsidian_mantis": ("enemy_obsidian_mantis", "boss_obsidian_mantis_idle_8frames_1024x420.png"),
+    "primordial_serpent": ("enemy_primodial_serpent", "boss_primordial_serpent_idle_8frames_1024x420.png"),
+    "shadow_weave": ("enemy_shadow_weave", "boss_shadow_weave_arachnid_idle_8frames_1024x420.png"),
+    "spire_walker": ("enemy_spire_walker", "boss_spire_walker_idle_8frames_1024x420.png"),
+    "void_lurker": ("enemy_void_lurker", "boss_void_lurker_idle_8frames_1024x420.png"),
+    "lich_dragon": ("eney_lich_dragon", "boss_lich_dragon_idle_8frames_1024x420.png"),
+}
 
 # ============================================================
 # AUFTRAG DRACHE-ANIMATIONEN (IDLE + ANGRIFF): Echte Frame-
@@ -1075,6 +1099,9 @@ def _anim_sheet_candidates(enemy_type, state):
     Reihenfolge: genau benannte Datei zuerst, dann Rest des Ordners)."""
     base = os.path.join(ENEMY_FOLDER, f"enemy_{enemy_type}")
     cands = []
+    if state == "idle" and enemy_type in BOSS_IDLE_SHEETS:
+        folder_name, filename = BOSS_IDLE_SHEETS[enemy_type]
+        cands.append(os.path.join(ENEMY_FOLDER, folder_name, filename))
     for ext in (".png", ".jpg", ".jpeg"):
         # enemys/enemy_dragon/hurt.png bzw. enemys/enemy_dragon_hurt.png
         cands.append(os.path.join(base, f"{state}{ext}"))
@@ -1102,6 +1129,20 @@ def _anim_sheet_candidates(enemy_type, state):
 def _load_anim_sheet(enemy_type, state):
     """Sucht + filtert das Spritesheet eines Zustands. Liefert >= 2
     Frames oder [] (dann greift alles wie bisher)."""
+    if state == "idle" and enemy_type in BOSS_IDLE_SHEETS:
+        folder_name, filename = BOSS_IDLE_SHEETS[enemy_type]
+        path = os.path.join(ENEMY_FOLDER, folder_name, filename)
+        try:
+            sheet = pygame.image.load(path).convert_alpha()
+            if sheet.get_width() % 8 or sheet.get_height() < 1:
+                raise ValueError(f"Unerwartetes Boss-Sheetformat: {sheet.get_size()}")
+            cell_w = sheet.get_width() // 8
+            frames = [sheet.subsurface((i * cell_w, 0, cell_w,
+                                        sheet.get_height())).copy()
+                      for i in range(8)]
+            return frames
+        except Exception as exc:
+            _log.warning("Boss-Idle-Sheet nicht ladbar (%s): %s", filename, exc)
     for path in _anim_sheet_candidates(enemy_type, state):
         try:
             sheet = pygame.image.load(path).convert_alpha()
@@ -1256,6 +1297,7 @@ SIDE_VIEW_ENEMIES = {"dragon"}
 #                      Kunstwerk, Bug rechts).
 ENEMY_FACES_LEFT = {"stalker", "lancer"}
 ENEMY_NO_ROTATE = {"eye", "medusa", "crystal"}
+ENEMY_NO_ROTATE.update(BOSS_IDLE_SHEETS)
 
 
 def enemy_rotated(img, enemy_type, enemy_x, enemy_y, ship_x, ship_y):
@@ -1709,10 +1751,24 @@ def load_module_image(module_key, level):
         module_images[cache_key] = scaled
         return scaled
     except Exception:
-        # Bewusst still: Nicht jedes Modul hat Bilder auf jeder Stufe ->
-        # dunkler Platzhalter als Rueckfall (wie gehabt).
+        # Das Repository enthaelt keine separaten modules/-Levelicons.
+        # Ein markierter, gleichmaessiger Glyph-Fallback haelt jedes Modul
+        # unterscheidbar, ohne die Werft oder Spielwerte zu beeinflussen.
         surf = pygame.Surface((40, 40), pygame.SRCALPHA)
-        pygame.draw.rect(surf, (40, 50, 70), (0, 0, 40, 40), border_radius=5)
+        pygame.draw.rect(surf, (15, 24, 40), (0, 0, 40, 40), border_radius=7)
+        accents = {
+            "kanonen": MAGENTA, "schild": CYAN, "huelle": ICE,
+            "reaktor": VIOLET, "antrieb": AMBER, "hangar": GREEN,
+            "radar": (168, 196, 232), "reparatur": WHITE,
+        }
+        glyphs = {"kanonen": "W", "schild": "S", "huelle": "H",
+                  "reaktor": "R", "antrieb": "A", "hangar": "D",
+                  "radar": "R", "reparatur": "+"}
+        accent = accents.get(module_key, CYAN)
+        pygame.draw.rect(surf, accent, (1, 1, 38, 38), 1, border_radius=7)
+        glyph = pygame.font.SysFont(None, 23, bold=True).render(
+            glyphs.get(module_key, "?"), True, accent)
+        surf.blit(glyph, glyph.get_rect(center=(20, 19)))
         module_images[cache_key] = surf
         return surf
 
@@ -2253,40 +2309,89 @@ def _werft_drone_count(hangar_level, extra_drones=0):
     return max(0, min(4, (hangar_level - 1) + int(extra_drones)))
 
 
+VIDEO_TARGET_FPS = 12.0
+VIDEO_MAX_SIZE = (960, 540)
+
+
+class FrameSequence(list):
+    """Decoded animation frames with the playback rate they were sampled at."""
+    def __init__(self, frames=(), fps=30.0):
+        super().__init__(frames)
+        self.fps = max(1.0, float(fps))
+
+
+def _video_surface(rgb_frame):
+    """Copy a decoded RGB frame into a bounded Pygame surface."""
+    h, w = rgb_frame.shape[:2]
+    surface = pygame.image.frombuffer(rgb_frame.tobytes(), (w, h), "RGB").copy()
+    max_w, max_h = VIDEO_MAX_SIZE
+    if w > max_w or h > max_h:
+        scale = min(max_w / float(w), max_h / float(h))
+        surface = pygame.transform.smoothscale(
+            surface, (max(1, int(w * scale)), max(1, int(h * scale)))
+        )
+    return surface
+
+
+def _sequence_duration(frames):
+    return len(frames) / max(1.0, float(getattr(frames, "fps", 30.0)))
+
+
+def _sequence_index(frames, seconds):
+    fps = max(1.0, float(getattr(frames, "fps", 30.0)))
+    return min(max(0, int(seconds * fps)), len(frames) - 1)
+
+
 def load_video_frames(path):
     """PAKET 8.3: Liest ein Video NATIV ein - primaer mit OpenCV (cv2),
-    Fallback imageio. Skalierung erst beim Zeichnen (resize-fest).
+    Fallback imageio. Dekodierte Frames werden fuer den Speicherbedarf
+    auf maximal 960x540 und 12 FPS begrenzt.
     Liefert [] wenn Datei fehlt oder kein Decoder vorhanden ist."""
-    frames = []
+    frames = FrameSequence(fps=VIDEO_TARGET_FPS)
     if not os.path.exists(path):
         return []
+    cap = None
     try:
         import cv2
         cap = cv2.VideoCapture(path)
+        source_fps = float(cap.get(cv2.CAP_PROP_FPS) or 30.0)
+        if not math.isfinite(source_fps) or source_fps <= 0:
+            source_fps = 30.0
+        sample_step = max(1, int(round(source_fps / VIDEO_TARGET_FPS)))
+        frames.fps = source_fps / sample_step
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            surf = pygame.image.frombuffer(frame.tobytes(),
-                                           (frame.shape[1], frame.shape[0]), "RGB")
-            frames.append(surf)
-        cap.release()
+            source_index = max(0, int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1)
+            if source_index % sample_step == 0:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frames.append(_video_surface(frame))
         if frames:
             return frames
     except Exception as e:
         _log.warning("Video-Einlesen mit cv2 fehlgeschlagen (%s): %s",
                      os.path.basename(path), e)
-        frames = []
+        frames = FrameSequence(fps=VIDEO_TARGET_FPS)
+    finally:
+        if cap is not None:
+            cap.release()
     # PAKET 8.3: Fallback ohne opencv (imageio/FFMPEG), falls installiert
     try:
         import imageio
         reader = imageio.get_reader(path)
-        for fr in reader:
-            surf = pygame.image.frombuffer(fr.tobytes(),
-                                           (fr.shape[1], fr.shape[0]), "RGB")
-            frames.append(surf)
-        reader.close()
+        meta = reader.get_meta_data()
+        source_fps = float(meta.get("fps") or 30.0)
+        if not math.isfinite(source_fps) or source_fps <= 0:
+            source_fps = 30.0
+        sample_step = max(1, int(round(source_fps / VIDEO_TARGET_FPS)))
+        frames.fps = source_fps / sample_step
+        try:
+            for source_index, fr in enumerate(reader):
+                if source_index % sample_step == 0:
+                    frames.append(_video_surface(fr))
+        finally:
+            reader.close()
     except Exception as e:
         _log.warning("Video-Fallback imageio fehlgeschlagen (%s): %s",
                      os.path.basename(path), e)
@@ -2297,7 +2402,7 @@ def load_frame_folder(path):
     """PAKET 8.3: Laedt eine Bildsequenz (defeat_001.jpg ...) als Video-
     Ersatz. Reines pygame - funktioniert OHNE cv2/imageio auf jedem
     Rechner. Fuer das prozedurale Defeat-Fallback gedacht."""
-    frames = []
+    frames = FrameSequence(fps=30.0)
     if not os.path.isdir(path):
         return []
     for name in sorted(os.listdir(path)):
@@ -2621,12 +2726,7 @@ class Game:
     def _load_prefs(self):
         self.prefs = {}
         try:
-            with open(_PREFS_PATH, "r", encoding="utf-8") as fh:
-                self.prefs = json.load(fh)
-        except FileNotFoundError:
-            # Bewusst still: Beim allerersten Start existiert ui_prefs.json
-            # noch nicht - das ist der normale Neuanfang.
-            self.prefs = {}
+            self.prefs = read_json(_PREFS_PATH, legacy_file("ui_prefs.json"), {})
         except Exception as e:
             _log.warning("ui_prefs.json unlesbar, Einstellungen zurueckgesetzt: %s", e)
             self.prefs = {}
@@ -2635,10 +2735,30 @@ class Game:
 
     def _save_prefs(self):
         try:
-            with open(_PREFS_PATH, "w", encoding="utf-8") as fh:
-                json.dump(self.prefs, fh)
+            write_json(_PREFS_PATH, self.prefs)
         except Exception as e:
             _log.warning("Einstellungen konnten nicht gespeichert werden: %s", e)
+            self.show_message("Einstellungen konnten nicht gespeichert werden.", 5.0)
+
+    def _display_save_errors(self):
+        """Show load/save failures instead of silently discarding them."""
+        for label, obj, attr in (
+                ("Spielstand", self.modules, "save_error"),
+                ("Spielstand", self.modules, "load_error"),
+                ("Skills", self.skills, "save_error"),
+                ("Skills", self.skills, "load_error")):
+            error = getattr(obj, attr, None)
+            if error:
+                _log.error("%s-Fehler: %s", label, error)
+                setattr(obj, attr, None)
+                self.show_message(
+                    f"{label} konnte nicht verarbeitet werden. Details im Benutzerordner-Log.",
+                    6.0)
+
+    def _save_modules(self):
+        saved = self.modules.save()
+        self._display_save_errors()
+        return saved
 
     # ---------------- Bruecken (Paket 3/4 + PAKET 7B/7C gear_mods) ----------------
     def _sync_modules_to_combat(self):
@@ -2747,7 +2867,7 @@ class Game:
             # Sammler-Quests (gleiche Metrik wie der aktive Pfad,
             # PAKET 8) - vorher gingen sie dort verloren.
             self.quests.record("cores_earned", n)
-        self.modules.save()
+        self._save_modules()
 
     # ---------------- PAKET 8.6: IDLE-BERICHT (OFFLINE-EINKOMMEN) ------
     def _idle_window_check(self):
@@ -2823,7 +2943,7 @@ class Game:
             return
         self.modules.credits += int(rep["credits"])
         self.modules.data_cores += int(rep["cores"])
-        self.modules.save()
+        self._save_modules()
         self._idle_report = None
         msg = f"IDLE-BERICHT ABGEHOLT: +{rep['credits']:,} Cr"
         if rep["cores"]:
@@ -2950,7 +3070,7 @@ class Game:
         self.modules.data_cores -= cost
         self.skills.unlock(node_id)
         self._sync_modules_to_combat()
-        self.modules.save()
+        self._save_modules()
         SFX.play("upgrade")
         pos = self.nexus.nodes.get(node_id)
         if pos:
@@ -3166,6 +3286,7 @@ class Game:
 
     # ---------------- Update (Logik unveraendert) ----------------
     def update(self, dt):
+        self._display_save_errors()
         self.quests.refresh()   # PAKET 8: Tages-/Wochen-Reset pruefen (billig)
         # Credits-Zahllauf (Anzeige naehert sich dem echten Stand an)
         target = self.modules.credits
@@ -3224,19 +3345,19 @@ class Game:
         self._save_heartbeat += dt
         if self._save_heartbeat >= rpg_config.IDLE_SAVE_HEARTBEAT_S:
             self._save_heartbeat = 0.0
-            self.modules.save()
+            self._save_modules()
 
         if self.state == self.INTRO:
             if self.intro_frames:
                 self.intro_timer += dt
-                if self.intro_timer >= len(self.intro_frames) / 30.0:
+                if self.intro_timer >= _sequence_duration(self.intro_frames):
                     self.state = self.MENU
             return
 
         if self.state in (self.STAGE_CLEAR, self.VICTORY):   # AUFTRAG 6: auch VICTORY
             if self.victory_frames:
                 self.victory_timer += dt * 2.0
-                full = len(self.victory_frames) / 30.0
+                full = _sequence_duration(self.victory_frames)
                 if self.victory_timer >= full:
                     self.victory_timer = full
             return
@@ -3256,7 +3377,7 @@ class Game:
             # Streifen mit Touch-Buttons.
             if self.defeat_frames:
                 self.defeat_timer += dt
-                full = len(self.defeat_frames) / 30.0
+                full = _sequence_duration(self.defeat_frames)
                 if self.defeat_timer > full:
                     self.defeat_timer = full
             return
@@ -3331,7 +3452,7 @@ class Game:
                 self.modules.data_cores += n_cores
                 self.pve.data_cores_earned = 0
                 self.quests.record("cores_earned", n_cores)   # PAKET 8 (aktiv)
-                self.modules.save()
+                self._save_modules()
 
             if not self.idle_mode and self.pve.is_defeated:
                 self.quests.note_loss()      # PAKET 8: Mission nicht mehr 'clean'
@@ -3369,7 +3490,7 @@ class Game:
                         # sofort auf beide Gefechte syncen - der naechste
                         # Einsatz laeuft mit skalierten Gegnern/Beute.
                         self.modules.ng_plus = int(getattr(self.modules, "ng_plus", 0)) + 1
-                        self.modules.save()
+                        self._save_modules()
                         self._sync_modules_to_combat()
                         self.state = self.VICTORY
                     else:
@@ -3625,7 +3746,7 @@ class Game:
             # die Auswahl. Neustart/Startseite sind danach getrennte Ziele.
             if bid == "def_skip":
                 if self.defeat_frames:
-                    self.defeat_timer = len(self.defeat_frames) / 30.0
+                    self.defeat_timer = _sequence_duration(self.defeat_frames)
             elif bid == "def_restart":
                 self._restart_stage()
             elif bid == "def_home":
@@ -3638,7 +3759,7 @@ class Game:
         if st in (self.STAGE_CLEAR, self.VICTORY):   # AUFTRAG 6: gleiche Buttons
             if bid == "vic_skip":
                 if self.victory_frames:
-                    self.victory_timer = len(self.victory_frames) / 30.0
+                    self.victory_timer = _sequence_duration(self.victory_frames)
             elif bid == "vic_next":
                 # AUFTRAG 20 (PUNKT 3): naechste Etage DIREKT aus dem
                 # Sieg-Screen starten - kein Zwangsrückweg zur Karte.
@@ -4390,7 +4511,7 @@ class Game:
     def _layout_clear(self):
         W, H = ui_kit.W, ui_kit.H
         ui = {}
-        ended = (not self.victory_frames) or self.victory_timer >= len(self.victory_frames) / 30.0
+        ended = (not self.victory_frames) or self.victory_timer >= _sequence_duration(self.victory_frames)
         if not ended:
             ui["vic_skip"] = Btn("vic_skip", pygame.Rect(0, 0, W, H))
             return ui
@@ -5284,6 +5405,13 @@ class Game:
                 else:
                     img0 = load_enemy_variant("dragon", "_closed")
                     ckey = "dragon_closed"   # eigener Cache-Key!
+            elif enemy.is_boss and load_enemy_anim(
+                    getattr(enemy, "visual_type", "") or enemy.enemy_type, "idle"):
+                _boss_visual = getattr(enemy, "visual_type", "") or enemy.enemy_type
+                _boss_frames = load_enemy_anim(_boss_visual, "idle")
+                _fi = _enemy_anim_idx(_boss_visual, "idle")
+                img0 = _boss_frames[_fi]
+                ckey = f"{_boss_visual}#idle#{_fi}"
             else:
                 # AUFTRAG DRACHEN-HURT: gilt GENERISCH - jeder Typ mit
                 # einer hurt-Sequenz (Ordner/Sheet) flinzt bei Schaden.
@@ -5299,7 +5427,9 @@ class Game:
             # AUFTRAG 15 (2. DURCHLAUF): Ausrichtung zentral über
             # enemy_rotated() - Nase jedes Gegnertyps zeigt zum Schiff,
             # einheitlich in Kampagne und Idle (siehe Tabellen oben).
-            rot = enemy_rotated(img, enemy.enemy_type,
+            _rotation_type = (getattr(enemy, "visual_type", "") or enemy.enemy_type) \
+                if enemy.is_boss else enemy.enemy_type
+            rot = enemy_rotated(img, _rotation_type,
                                 enemy.x, enemy.y, ship_x, ship_y)
             ex, ey = T(enemy.x, enemy.y)
             # PAKET 8.8a: BOSS-PRAESENZ - pulsierende Aura in Boss-Farbe
@@ -5529,8 +5659,8 @@ class Game:
         W, H = ui_kit.W, ui_kit.H
         if not frames:
             return True
-        full = len(frames) / 30.0
-        idx = min(int(timer * 30), len(frames) - 1)
+        full = _sequence_duration(frames)
+        idx = _sequence_index(frames, timer)
         frame = self._video_frame(frames, idx)
         SCREEN.fill((0, 0, 0))
         fw, fh = frame.get_size()
@@ -5545,7 +5675,7 @@ class Game:
     def draw_defeat(self):
         """Defeat-Video mit unsichtbaren Aktions-Hitboxen; keine Buttons zeichnen."""
         self._ui = self._layout_defeat()
-        full = len(self.defeat_frames) / 30.0 if self.defeat_frames else 0.0
+        full = _sequence_duration(self.defeat_frames) if self.defeat_frames else 0.0
 
         if self.defeat_frames:
             self._video_overlay(self.defeat_frames,
@@ -5659,7 +5789,7 @@ class Game:
         if rw.get("cores"):
             self.modules.data_cores += int(rw["cores"])
             parts.append(f"+{rw['cores']} CORES")
-        self.modules.save()
+        self._save_modules()
         self.show_message((source + ": " if source else "") + "  ".join(parts))
 
     def _draw_rpg_chips(self, y, extra=None):
@@ -5885,7 +6015,7 @@ class Game:
         self.modules.data_cores -= res["spent"]
         if res["credits_back"]:
             self.modules.credits += res["credits_back"]
-        self.modules.save()
+        self._save_modules()
         self._summon_result = res
         self._summon_tab = "summon"
         # PAKET 8.5/8.6: Zeremonie-Tier nach bester Seltenheit der Ziehung;
@@ -6243,7 +6373,7 @@ class Game:
                 msg += f"  ·  {sk['name']}"
             self.show_message(msg)
         self._sync_modules_to_combat()
-        self.modules.save()               # equipped landet im RPG-Block
+        self._save_modules()               # equipped landet im RPG-Block
         SFX.play("click", 0.5)
 
     def draw_summon(self):

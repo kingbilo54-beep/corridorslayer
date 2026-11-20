@@ -22,15 +22,15 @@ class SoundSystem:
             if pygame.mixer.get_init() is None:
                 pygame.mixer.init()
         except Exception as e:
-            print(f"⚠️ Kein Audiogerät: {e}")
+            print(f"Kein Audiogeraet: {e}")
             self.enabled = False
             return
         try:
             self._generate_sounds()
             self._built = True
-            print("✅ Sound-System bereit (Sound-Toggle in den Einstellungen).")
+            print("Sound-System bereit (Sound-Toggle in den Einstellungen).")
         except Exception as e:
-            print(f"⚠️ Sound-System deaktiviert: {e}")
+            print(f"Sound-System deaktiviert: {e}")
             self.enabled = False
 
     def _mixer_format(self):

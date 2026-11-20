@@ -20,8 +20,9 @@ from pathlib import Path
 # SCHRITT 3: Globale Skill-Kostenbremse liegt zentral im BALANCE-Block
 # von rpg_config.py und wird nur noch importiert (Wert identisch).
 from rpg_config import SKILL_COST_MULT, SKILL_PRICE_MULT, SKILL_PRICE_STRONG_MULT
+from save_store import data_file, legacy_file, read_json, write_json
 
-SAVE_PATH = Path(__file__).with_name("corridor_slayer_skills.json")
+SAVE_PATH = data_file("corridor_slayer_skills.json")
 
 # Sparten-Farben (skill_nexus + main.py nutzen dieselben Werte)
 COLOR_OFF = (255, 62, 177)     # Magenta  - Offensive
@@ -192,6 +193,8 @@ class SkillTree:
 
     def __init__(self):
         self.levels = {}
+        self.save_error = None
+        self.load_error = None
         self.load()
 
     # ---------- Abfragen ----------
@@ -253,23 +256,33 @@ class SkillTree:
         return self.level_of(node_id)
 
     def save(self):
+        self.save_error = None
         try:
             payload = {"levels": dict(self.levels)}
-            SAVE_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        except OSError:
-            pass
+            write_json(SAVE_PATH, payload)
+            return True
+        except (OSError, TypeError, ValueError) as exc:
+            self.save_error = str(exc)
+            return False
 
     def load(self):
+        self.load_error = None
         try:
-            data = json.loads(SAVE_PATH.read_text(encoding="utf-8"))
+            data = read_json(SAVE_PATH, legacy_file("corridor_slayer_skills.json"))
+            if data is None:
+                self.levels = {}
+                return
+            if not isinstance(data, dict):
+                raise ValueError("Der Skill-Spielstand muss ein JSON-Objekt enthalten.")
             raw = data.get("levels", {})
             # Nur bekannte Knoten uebernehmen (Fremd-/Alt-Keys ignorieren,
             # dadurch bleiben auch zukuenftige Felder gefahrlos).
             known = set(NODE_BY_ID.keys())
             self.levels = {str(k): max(0, int(v)) for k, v in raw.items()
                            if str(k) in known}
-        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
             self.levels = {}
+            self.load_error = str(exc)
 
     # ---------- Bruecke zu pve_system ----------
     def modifiers(self):

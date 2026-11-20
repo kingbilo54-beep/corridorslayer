@@ -1,0 +1,8 @@
+# Optional video decoding; image-sequence and menu fallbacks work without these.
+opencv-python>=4.8
+# Alternatively, install imageio with its bundled ffmpeg reader:
+imageio[ffmpeg]>=2.31
+
+# Optional sprite_extractor GUI tool only:
+Pillow>=10
+scipy>=1.11
