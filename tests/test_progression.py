@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 from types import SimpleNamespace
+from unittest import mock
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 _data = tempfile.TemporaryDirectory(prefix="cs_progression_tests_")
@@ -82,6 +83,7 @@ class ProgressionTests(unittest.TestCase):
     def test_quantum_respec_spends_currency_and_refunds_skill_cores(self):
         game = object.__new__(main.Game)
         game.skills = SimpleNamespace(levels={"node": 2})
+        game.skills.total_spent = lambda: 37
         game.skills.reset_all = lambda save=True: 37
         game.modules = SimpleNamespace(data_cores=4)
         game.rpg = progression.PlayerProgress()
@@ -105,6 +107,19 @@ class ProgressionTests(unittest.TestCase):
         game._quantum_skill_respec()
         self.assertEqual(game.rpg.quantum, cfg.QUANTUM_SKILL_RESET_COST - 1)
         self.assertEqual(game.modules.data_cores, 4)
+
+    def test_respec_recovery_marker_survives_module_save_roundtrip(self):
+        import module_system
+        from pathlib import Path
+        save_path = Path(_data.name) / "respec_transaction_test.json"
+        with mock.patch.object(module_system, "SAVE_PATH", save_path):
+            modules = module_system.FortressModules()
+            modules.data_cores = 39
+            modules.skill_respec_pending = True
+            self.assertTrue(modules.save())
+            restored = module_system.FortressModules()
+        self.assertTrue(restored.skill_respec_pending)
+        self.assertEqual(restored.data_cores, 39)
 
     def test_quantum_rejects_invalid_or_negative_amounts(self):
         p = progression.PlayerProgress()

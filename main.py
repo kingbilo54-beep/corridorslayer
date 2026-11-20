@@ -2631,6 +2631,16 @@ class Game:
                                                      self.summon)
         self.modules.rpg_ref = self._rpg_bundle
         self._rpg_bundle.restore(self.modules.rpg_raw)
+        if self.modules.skill_respec_pending:
+            if self.skills.reset_all(save=True) is not None:
+                self.modules.skill_respec_pending = False
+                if not self._save_modules():
+                    self.modules.skill_respec_pending = True
+                    self.show_message(
+                        "Skill-Neuverteilung wird beim naechsten Start fortgesetzt", 6.0)
+            else:
+                self.show_message(
+                    "Skill-Neuverteilung konnte nicht abgeschlossen werden", 6.0)
         self.quests.refresh()
         self._summon_result = None       # letztes Beschwörungs-Ergebnis
         self._ceremony = None            # PAKET 8.5: laufende Zeremonie
@@ -3155,17 +3165,28 @@ class Game:
             return
         old_levels = dict(self.skills.levels)
         old_cores, old_quantum = self.modules.data_cores, self.rpg.quantum
-        refund = self.skills.reset_all(save=True)
-        if refund is None:
-            self.show_message("Skill-Spielstand konnte nicht gespeichert werden")
-            return
+        refund = self.skills.total_spent()
         self.modules.data_cores += refund
         self.rpg.spend_quantum(cost)
+        self.modules.skill_respec_pending = True
         if not self._save_modules():
+            self.modules.skill_respec_pending = False
             self.skills.levels = old_levels
-            self.skills.save()
             self.modules.data_cores, self.rpg.quantum = old_cores, old_quantum
             self.show_message("Neuverteilung nicht gespeichert; Kauf abgebrochen")
+            return
+        if self.skills.reset_all(save=True) is None:
+            self.modules.skill_respec_pending = False
+            self.modules.data_cores, self.rpg.quantum = old_cores, old_quantum
+            self._save_modules()
+            self.show_message("Skill-Spielstand konnte nicht gespeichert werden")
+            return
+        self.modules.skill_respec_pending = False
+        if not self._save_modules():
+            # Der zuvor gespeicherte Marker bleibt auf Disk aktiv. Der naechste
+            # Start vervollstaendigt den bereits abgezogenen Kauf idempotent.
+            self.modules.skill_respec_pending = True
+            self.show_message("Neuverteilung wird beim naechsten Start abgeschlossen")
             return
         self.nexus.select(None)
         self._sync_modules_to_combat()

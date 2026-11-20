@@ -159,6 +159,9 @@ class FortressModules:
         # rpg_ref = von main.py gesetzte Live-Objekte (RPGBundle).
         self.rpg_raw = None
         self.rpg_ref = None
+        # Transaktionsmarker fuer die Quantum-Skill-Neuverteilung. Der
+        # Vorgang umfasst zwei JSON-Dateien und wird nach Absturz fortgesetzt.
+        self.skill_respec_pending = False
         # AUFTRAG 22: LIVE-IDLE-FENSTER (Neustart-resistent). Rollierendes
         # 24-h-Fenster: max 8 h Idle-Einkommen und 20 Cores je Fenster.
         # Persistiert im Save; alte Saves ohne die Keys starten sauber mit
@@ -306,6 +309,7 @@ class FortressModules:
             # AUFTRAG 6: NG+-Grad aus dem Spielstand (fehlt in alten Saves
             # -> 0, keine Migration noetig).
             self.ng_plus = max(0, int(data.get("ng_plus", 0)))
+            self.skill_respec_pending = data.get("skill_respec_pending") is True
             levels = dict(data.get("levels", {}))
             # PAKET 7C MIGRATION: Vor 7C erhoehte "schild" die max. Huelle.
             # Alte Saves bekommen ihr Hullen-Level EINMALIG auf das neue
@@ -353,6 +357,8 @@ class FortressModules:
                 "ship_campaign_progress": self.ship_campaign_progress,
                 "cosmetic_hull": int(self.cosmetic_hull),
                 "ng_plus": int(getattr(self, "ng_plus", 0)),
+                "skill_respec_pending": bool(
+                    getattr(self, "skill_respec_pending", False)),
                 "saved_at": time.time(),
                 "levels": {key: int(module.level) for key, module in self.modules.items()},
                 # AUFTRAG 22: Live-Idle-Fenster persistieren (Neustart-
