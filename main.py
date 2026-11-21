@@ -367,6 +367,16 @@ ENEMY_IMG_W = {"skitter": 46, "shard": 50, "husk": 62, "wraith": 52,
                "shadow_weave": 350, "spire_walker": 350,
                "void_lurker": 390, "lich_dragon": 430}
 
+# Boss idle sheets are mostly transparent 1024px tiles. These per-archetype
+# widths describe the visible alpha bounds after the common-frame crop.
+BOSS_VISIBLE_W = {
+    "astral_centaur": 145, "colossal_armadillo": 205,
+    "corrupted_gryphon": 165, "dreadmaw_behemoth": 225,
+    "obsidian_mantis": 150, "primordial_serpent": 165,
+    "shadow_weave": 205, "spire_walker": 135,
+    "void_lurker": 155, "lich_dragon": 180,
+}
+
 # Eigene idle-Sheets aus dem Repository. Diese zehn Bosse hatten Assets,
 # aber weder Spawn-Konfiguration noch einen Loader im normalen Spritepfad.
 # Die Verzeichnis-/Dateinamen sind hier explizit, einschließlich der beiden
@@ -460,9 +470,10 @@ def load_enemy_anim(enemy_type, state="idle"):
     if len(frames) >= 2:
         w0, h0 = frames[0].get_size()
         if state == "idle":
-            # Idle: Zielbreite = ENEMY_IMG_W des Typs (wie bisher -
-            # diese Optik ist abgenommen).
-            target_w = ENEMY_IMG_W.get(enemy_type, 70)
+            # Boss sheets: target width is the visible crop, not the source
+            # canvas width. Other enemy types retain their prior target.
+            target_w = BOSS_VISIBLE_W.get(
+                enemy_type, ENEMY_IMG_W.get(enemy_type, 70))
             target_h = max(1, int(h0 * (target_w / max(1, w0))))
         else:
             # AUFTRAG ATTACK2: Angriff & Co. ueber die SICHTBARE
@@ -501,6 +512,30 @@ def _enemy_anim_idx(enemy_type, state="idle"):
     if not frames:
         return 0
     return int((pygame.time.get_ticks() / 1000.0) * ANIM_FPS) % len(frames)
+
+
+def _state_anim_idx(enemy, n_frames, *, loop):
+    """Select a frame from combat-owned time, never from the global clock."""
+    if n_frames <= 1:
+        return 0
+    elapsed = max(0.0, float(getattr(enemy, "boss_anim_elapsed", 0.0)))
+    idx = int(elapsed * ANIM_FPS)
+    return idx % n_frames if loop else min(n_frames - 1, idx)
+
+
+def _boss_animation_frames(enemy, visual_type):
+    """Prefer attack-specific art, then state art; caller supplies idle fallback."""
+    state = getattr(enemy, "boss_anim_state", "idle")
+    attack_key = getattr(enemy, "boss_attack_key", "")
+    candidates = []
+    if state != "idle" and attack_key:
+        candidates.append(f"{state}_{attack_key}")
+    candidates.append(state)
+    for candidate in candidates:
+        frames = load_enemy_anim(visual_type, candidate)
+        if frames:
+            return candidate, frames
+    return "idle", load_enemy_anim(visual_type, "idle")
 
 
 # ============================================================
@@ -1127,6 +1162,25 @@ def _anim_sheet_candidates(enemy_type, state):
     return cands
 
 
+def _crop_frames_shared_alpha_bounds(frames):
+    """Crop a frame sequence with one union rectangle and stable anchors."""
+    bounds = [frame.get_bounding_rect(min_alpha=8) for frame in frames]
+    bounds = [rect for rect in bounds if rect.width and rect.height]
+    if not bounds:
+        return frames
+    left = min(rect.left for rect in bounds)
+    top = min(rect.top for rect in bounds)
+    right = max(rect.right for rect in bounds)
+    bottom = max(rect.bottom for rect in bounds)
+    padx = max(2, int((right - left) * 0.035))
+    pady = max(2, int((bottom - top) * 0.035))
+    crop = pygame.Rect(left - padx, top - pady,
+                       right - left + 2 * padx, bottom - top + 2 * pady)
+    crop.clamp_ip(pygame.Rect(0, 0, frames[0].get_width(),
+                              frames[0].get_height()))
+    return [frame.subsurface(crop).copy() for frame in frames]
+
+
 def _load_anim_sheet(enemy_type, state):
     """Sucht + filtert das Spritesheet eines Zustands. Liefert >= 2
     Frames oder [] (dann greift alles wie bisher)."""
@@ -1141,7 +1195,7 @@ def _load_anim_sheet(enemy_type, state):
             frames = [sheet.subsurface((i * cell_w, 0, cell_w,
                                         sheet.get_height())).copy()
                       for i in range(8)]
-            return frames
+            return _crop_frames_shared_alpha_bounds(frames)
         except Exception as exc:
             _log.warning("Boss-Idle-Sheet nicht ladbar (%s): %s", filename, exc)
     for path in _anim_sheet_candidates(enemy_type, state):
@@ -1208,10 +1262,10 @@ def _dragon_atk_state(enemy):
     return None
 
 
-def _dragon_atk_frame_idx(subset):
-    """Frame-Index INNERHALB der Teilmenge (globale Uhr, wie idle)."""
+def _dragon_atk_frame_idx(subset, enemy=None):
+    """Frame-Index der Teilmenge, synchron zur aktuellen Combat-Phase."""
     idxs = DRAGON_ATTACK_SUBSETS[subset]
-    return int((pygame.time.get_ticks() / 1000.0) * ANIM_FPS) % len(idxs)
+    return _state_anim_idx(enemy, len(idxs), loop=(subset == "fire"))
 
 
 # ============================================================
@@ -1251,13 +1305,17 @@ def _dragon_extra_state(enemy):
     state = DRAGON_EXTRA_STATES.get(kind)
     if state and len(load_enemy_anim("dragon", state)) >= 2:
         return state
+    if kind == 3:
+        # Temporary art fallback: keep the real ice-spike lane telegraph and
+        # play the dragon's animated idle until a dedicated attack3 sequence
+        # is supplied. Never silently substitute a static dragon image.
+        return "attack3_fallback"
     return None
 
 
-def _dragon_extra_frame_idx(n_frames):
-    """Frame-Index der Zusatz-Angriffs-Animation (globale Uhr, wie idle)
-    - loopt, bis der Zustand zurueckkehrt."""
-    return int((pygame.time.get_ticks() / 1000.0) * ANIM_FPS) % max(1, n_frames)
+def _dragon_extra_frame_idx(n_frames, enemy=None):
+    """Combat-clock frame for a dragon extra-attack sequence."""
+    return _state_anim_idx(enemy, n_frames, loop=False)
 
 
 def _hurt_frame_idx(enemy, n_frames):
@@ -5769,7 +5827,7 @@ class Game:
                 _frames_atk = load_enemy_anim("dragon", "attack")
                 _frames_hurt = load_enemy_anim("dragon", "hurt")
                 if _sub and _frames_atk:
-                    _fi = _dragon_atk_frame_idx(_sub)
+                    _fi = _dragon_atk_frame_idx(_sub, enemy)
                     img0 = _frames_atk[DRAGON_ATTACK_SUBSETS[_sub][_fi]]
                     ckey = f"dragon#{_sub}#{_fi}"
                 elif getattr(enemy, "hurt_t", 0.0) > 0.0 and _frames_hurt:
@@ -5781,8 +5839,13 @@ class Game:
                     # ANGRIFFE zeigen ihre eigene Sequenz statt Idle.
                     _ex = _dragon_extra_state(enemy)
                     _fr_x = load_enemy_anim("dragon", _ex) if _ex else []
-                    if _ex and len(_fr_x) >= 2:
-                        _fi = _dragon_extra_frame_idx(len(_fr_x))
+                    if _ex == "attack3_fallback":
+                        _idle = load_enemy_anim("dragon", "idle")
+                        _fi = _state_anim_idx(enemy, len(_idle), loop=True)
+                        img0 = _idle[_fi] if _idle else load_enemy_image("dragon")
+                        ckey = f"dragon#attack3_fallback#{_fi}"
+                    elif _ex and len(_fr_x) >= 2:
+                        _fi = _dragon_extra_frame_idx(len(_fr_x), enemy)
                         img0 = _fr_x[_fi]
                         ckey = f"dragon#{_ex}#{_fi}"
                     else:
@@ -5806,10 +5869,12 @@ class Game:
             elif enemy.is_boss and load_enemy_anim(
                     getattr(enemy, "visual_type", "") or enemy.enemy_type, "idle"):
                 _boss_visual = getattr(enemy, "visual_type", "") or enemy.enemy_type
-                _boss_frames = load_enemy_anim(_boss_visual, "idle")
-                _fi = _enemy_anim_idx(_boss_visual, "idle")
+                _boss_state, _boss_frames = _boss_animation_frames(
+                    enemy, _boss_visual)
+                _fi = _state_anim_idx(
+                    enemy, len(_boss_frames), loop=(_boss_state == "idle"))
                 img0 = _boss_frames[_fi]
-                ckey = f"{_boss_visual}#idle#{_fi}"
+                ckey = f"{_boss_visual}#{_boss_state}#{_fi}"
             else:
                 # AUFTRAG DRACHEN-HURT: gilt GENERISCH - jeder Typ mit
                 # einer hurt-Sequenz (Ordner/Sheet) flinzt bei Schaden.

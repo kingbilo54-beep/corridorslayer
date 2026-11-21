@@ -7,6 +7,7 @@ from pathlib import Path   # SCHRITT 1c: Excel-Pfad unabhaengig vom Arbeitsordne
 from dataclasses import dataclass
 from sound_system import SFX
 import campaign_system
+from boss_animation import advance_boss_animation
 # SCHRITT 3: Globale BAL_*-Koeffizienten liegen zentral im BALANCE-Block
 # von rpg_config.py und werden nur noch importiert (Werte identisch).
 from rpg_config import (BAL_PLAYER_DMG, BAL_PLAYER_RATE, BAL_PLAYER_HP,
@@ -836,6 +837,11 @@ class Enemy:
     boss_attack_timer: float = 0.0
     boss_attack_waves_left: int = 0
     boss_attack_waves_fired: int = 0
+    # Render state is derived from combat state and advances only with combat dt.
+    boss_anim_state: str = "idle"
+    boss_anim_elapsed: float = 0.0
+    boss_anim_attack_t: float = 0.0
+    boss_anim_impact_t: float = 0.0
     # AUFTRAG 21: Typ-eigene Bewegung & Angriffsmuster (Normal-Gegner)
     mv_phase: float = 0.0      # Phasenversatz Bob/Sway (Random je Spawn)
     pattern: str = "shot"      # "shot" (klassisch) | "zigzag" | "dash" | "kamikaze" | "fan"
@@ -1405,6 +1411,8 @@ class PvECombat:
 
     def _fire_boss_attack(self, e, attack, cx, cy):
         """Emit one authored wave for the boss attack currently in `fire`."""
+        e.boss_anim_attack_t = 0.18
+        e.boss_anim_impact_t = 0.0
         dx, dy = cx - e.x, cy - e.y
         aim = math.atan2(dy, dx)
         count = int(attack["count"] + (2 if e.enraged and attack["pattern"] in ("fan", "radial") else 0))
@@ -1624,6 +1632,8 @@ class PvECombat:
                 damage=BOMB_DMG * (1.2 if rage else 1.0) * self._boss_fx_dmg(),   # AUFTRAG 16b
                 col=e.boss_col))
         e.bomb_marks = None
+        e.boss_anim_attack_t = 0.18
+        e.boss_anim_impact_t = 0.0
         e.atk_kind = 0
         lo, hi = BOMB_CD_RAGE if rage else BOMB_CD
         e.atk_cd = random.uniform(lo, hi)
@@ -1653,6 +1663,8 @@ class PvECombat:
                    * self._boss_fx_dmg(),   # AUFTRAG 16b: globale Koeffizienten
                 col=e.boss_col))
         e.spike_marks = None
+        e.boss_anim_attack_t = 0.18
+        e.boss_anim_impact_t = 0.0
         e.atk_kind = 0
         lo, hi = SPIKE_CD_RAGE if e.enraged else SPIKE_CD
         e.atk_cd = random.uniform(lo, hi)
@@ -1984,6 +1996,12 @@ class PvECombat:
                                        motion=attack.get("motion", "straight"),
                                        impact_radius=attack.get("impact", 0),
                                        split_after=attack.get("split", 0)))
+
+            if e.is_boss:
+                # Run after combat updates so rendering sees the exact attack
+                # phase that emitted (or is about to emit) its projectiles.
+                # Paused combat does not call update, so this clock pauses too.
+                advance_boss_animation(e, dt)
 
         # AUFTRAG BOSS-ABSTAND: Der Drache haelt bei 640 (BOSS_HOLD_X)
         # - ausserhalb der Normal-Zielrange 450, aber ohne Ueberlapp
